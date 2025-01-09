@@ -19,7 +19,7 @@ class Api:
 
     @staticmethod
     def _post(url: str, body: str) -> Optional[str]:
-        result = httpx.post(url, data=body)
+        result = httpx.post(url, json=body)
         if result.status_code == 200:
             return result.text
         else:
@@ -31,7 +31,9 @@ class Api:
             return_dtype=pl.Utf8,
         )
 
-    def post(self, body: pl.Expr = None) -> pl.Expr:
+    def post(self, body: Optional[pl.Expr] = None) -> pl.Expr:
+        if body is None:
+            body = pl.lit("")
         return pl.struct([self._url.alias("url"), body.alias("body")]).map_elements(
             lambda x: self._post(x["url"], x["body"]),
             return_dtype=pl.Utf8,
