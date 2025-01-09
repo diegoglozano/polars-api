@@ -1,1 +1,1 @@
-::: polars_api.foo
+::: polars_api.api
