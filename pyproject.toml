@@ -17,6 +17,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+dependencies = [
+    "httpx>=0.28.1",
+    "polars>=1.19.0",
+]
 
 [project.urls]
 Homepage = "https://diegoglozano.github.io/polars-api/"
