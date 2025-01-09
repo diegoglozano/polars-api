@@ -31,7 +31,7 @@ class Api:
             return_dtype=pl.Utf8,
         )
 
-    def post(self, body: Optional[pl.Expr] = None) -> pl.Expr:
+    def post(self, body: pl.Expr = None) -> pl.Expr:
         return pl.struct([self._url.alias("url"), body.alias("body")]).map_elements(
             lambda x: self._post(x["url"], x["body"]),
             return_dtype=pl.Utf8,
