@@ -10,7 +10,7 @@ class Api:
         self._url = url
 
     @staticmethod
-    def _get(url: str) -> str:
+    def _get(url: str) -> Optional[str]:
         result = httpx.get(url)
         if result.status_code == 200:
             return result.text
@@ -18,7 +18,7 @@ class Api:
             return None
 
     @staticmethod
-    def _post(url: str, body: str) -> str:
+    def _post(url: str, body: str) -> Optional[str]:
         result = httpx.post(url, data=body)
         if result.status_code == 200:
             return result.text
