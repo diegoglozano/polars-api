@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 
 import httpx
@@ -10,8 +11,8 @@ class Api:
         self._url = url
 
     @staticmethod
-    def _get(url: str) -> Optional[str]:
-        result = httpx.get(url)
+    def _get(url: str, params: Optional[str] = None) -> Optional[str]:
+        result = httpx.get(url, params=params)
         if result.status_code == 200:
             return result.text
         else:
@@ -26,15 +27,29 @@ class Api:
             return None
 
     def get(self, params: Optional[pl.Expr] = None) -> pl.Expr:
-        return self._url.map_elements(
-            lambda x: self._get(x),
+        if params is None:
+            params = pl.lit(None)
+        return pl.struct([self._url.alias("url"), params.alias("params")]).map_elements(
+            lambda x: self._get(x["url"], params=x["params"]),
             return_dtype=pl.Utf8,
         )
 
     def post(self, body: Optional[pl.Expr] = None) -> pl.Expr:
         if body is None:
-            body = pl.lit("")
+            body = pl.lit(None)
         return pl.struct([self._url.alias("url"), body.alias("body")]).map_elements(
-            lambda x: self._post(x["url"], x["body"]),
+            lambda x: self._post(x["url"], body=x["body"]),
             return_dtype=pl.Utf8,
         )
+
+    @staticmethod
+    async def _aget(url: str) -> str:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(url)
+            if r.status_code == 200:
+                return r.text
+            else:
+                return ""
+
+    def aget(self) -> pl.Expr:
+        return self._url.map_batches(lambda x: (asyncio.gather(*[self._aget(u) for u in x])))
