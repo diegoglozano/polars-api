@@ -11,63 +11,81 @@ Polars extension for dealing with REST APIs
 - **Github repository**: <https://github.com/diegoglozano/polars-api/>
 - **Documentation** <https://diegoglozano.github.io/polars-api/>
 
-## Getting started with your project
+## Installation
 
-### 1. Create a New Repository
-
-First, create a repository on GitHub with the same name as this project, and then run the following commands:
-
-```bash
-git init -b main
-git add .
-git commit -m "init commit"
-git remote add origin git@github.com:diegoglozano/polars-api.git
-git push -u origin main
+```sh
+uv add polars-api
 ```
 
-### 2. Set Up Your Development Environment
-
-Then, install the environment and the pre-commit hooks with
-
-```bash
-make install
+```sh
+poetry add polars-api
 ```
 
-This will also generate your `uv.lock` file
-
-### 3. Run the pre-commit hooks
-
-Initially, the CI/CD pipeline might be failing due to formatting issues. To resolve those run:
-
-```bash
-uv run pre-commit run -a
+```sh
+pip install polars-api
 ```
 
-### 4. Commit the changes
+## Usage
 
-Lastly, commit the changes made by the two steps above to your repository.
+Just import the library as `import polars_api` and the new `api` namespace will be available.
 
-```bash
-git add .
-git commit -m 'Fix formatting issues'
-git push origin main
+In the following example:
+
+- We set a base URL using [jsonplaceholder](https://jsonplaceholder.typicode.com/) as a fake REST API
+- For each row, we generate a different body using a `struct` type
+- Finally, we call different methods for getting the data:
+  - `.api.get()`: sync GET
+  - `.api.aget()`: async GET
+  - `.api.post()`: sync POST
+  - `.api.apost()`: async POST
+
+These methods will return the result as a `string`, but with polars you can convert it easily in a struct and access its values using `.str.json_decode()` method.
+
+```python
+import polars as pl
+import polars_api
+
+
+BASE_URL = "https://jsonplaceholder.typicode.com/posts"
+df = (
+    pl
+    .DataFrame({
+        "url": [BASE_URL for _ in range(10)],
+    })
+    .with_columns(
+        pl
+        .struct(
+            title=pl.lit("foo"),
+            body=pl.lit("bar"),
+            userId=pl.arange(10),
+        )
+        .alias("body"),
+    )
+    .with_columns(
+        pl
+        .col("url")
+        .api.get()
+        .str.json_decode()
+        .alias("get"),
+        pl
+        .col("url")
+        .api.aget()
+        .str.json_decode()
+        .alias("aget"),
+        pl
+        .col("url")
+        .api.post(body=pl.col("body"))
+        .str.json_decode()
+        .alias("post"),
+        pl
+        .col("url")
+        .api.apost(body=pl.col("body"))
+        .str.json_decode()
+        .alias("apost"),
+    )
+)
+
 ```
-
-You are now ready to start development on your project!
-The CI/CD pipeline will be triggered when you open a pull request, merge to main, or when you create a new release.
-
-To finalize the set-up for publishing to PyPI, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/publishing/#set-up-for-pypi).
-For activating the automatic documentation with MkDocs, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/mkdocs/#enabling-the-documentation-on-github).
-To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/codecov/).
-
-## Releasing a new version
-
-- Create an API Token on [PyPI](https://pypi.org/).
-- Add the API Token to your projects secrets with the name `PYPI_TOKEN` by visiting [this page](https://github.com/diegoglozano/polars-api/settings/secrets/actions/new).
-- Create a [new release](https://github.com/diegoglozano/polars-api/releases/new) on Github.
-- Create a new tag in the form `*.*.*`.
-
-For more details, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/cicd/#how-to-trigger-a-release).
 
 ---
 
