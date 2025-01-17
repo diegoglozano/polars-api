@@ -15,77 +15,83 @@ class Api:
         self._url = url
 
     @staticmethod
-    def _get(url: str, params: Optional[dict[str, str]] = None) -> Optional[str]:
-        result = httpx.get(url, params=params)
+    def _get(url: str, params: Optional[dict[str, str]] = None, timeout: Optional[float] = None) -> Optional[str]:
+        result = httpx.get(url, params=params, timeout=timeout)
         if check_status_code(result.status_code):
             return result.text
         else:
             return None
 
     @staticmethod
-    def _post(url: str, params: dict[str, str], body: str) -> Optional[str]:
-        result = httpx.post(url, params=params, json=body)
+    def _post(url: str, params: dict[str, str], body: str, timeout: float) -> Optional[str]:
+        result = httpx.post(url, params=params, json=body, timeout=timeout)
         if check_status_code(result.status_code):
             return result.text
         else:
             return None
 
     @staticmethod
-    async def _aget_one(url: str, params: str) -> str:
+    async def _aget_one(url: str, params: str, timeout: float) -> str:
         async with httpx.AsyncClient() as client:
-            r = await client.get(url, params=params)
+            r = await client.get(url, params=params, timeout=timeout)
             return r.text
 
-    async def _aget_all(self, x, params):
-        return await asyncio.gather(*[self._aget_one(url, param) for url, param in zip(x, params)])
+    async def _aget_all(self, x, params, timeout):
+        return await asyncio.gather(*[self._aget_one(url, param, timeout) for url, param in zip(x, params)])
 
-    def _aget(self, x, params):
-        return pl.Series(asyncio.run(self._aget_all(x, params)))
+    def _aget(self, x, params, timeout):
+        return pl.Series(asyncio.run(self._aget_all(x, params, timeout)))
 
     @staticmethod
-    async def _apost_one(url: str, params: str, body: str) -> str:
+    async def _apost_one(url: str, params: str, body: str, timeout: Optional[float]) -> str:
         async with httpx.AsyncClient() as client:
-            r = await client.post(url, params=params, json=body)
+            r = await client.post(url, params=params, json=body, timeout=timeout)
             return r.text
 
-    async def _apost_all(self, x, params, body):
+    async def _apost_all(self, x, params, body, timeout):
         return await asyncio.gather(*[
-            self._apost_one(url, _params, _body) for url, _params, _body in zip(x, params, body)
+            self._apost_one(url, _params, _body, timeout) for url, _params, _body in zip(x, params, body)
         ])
 
-    def _apost(self, x, params, body):
-        return pl.Series(asyncio.run(self._apost_all(x, params, body)))
+    def _apost(self, x, params, body, timeout):
+        return pl.Series(asyncio.run(self._apost_all(x, params, body, timeout)))
 
-    def get(self, params: Optional[pl.Expr] = None) -> pl.Expr:
+    def get(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None) -> pl.Expr:
         if params is None:
             params = pl.lit(None)
         return pl.struct(self._url.alias("url"), params.alias("params")).map_elements(
-            lambda x: self._get(x["url"], params=x["params"]),
+            lambda x: self._get(x["url"], params=x["params"], timeout=timeout),
             return_dtype=pl.Utf8,
         )
 
-    def post(self, params: Optional[pl.Expr] = None, body: Optional[pl.Expr] = None) -> pl.Expr:
+    def post(
+        self, params: Optional[pl.Expr] = None, body: Optional[pl.Expr] = None, timeout: Optional[float] = None
+    ) -> pl.Expr:
         if params is None:
             params = pl.lit(None)
         if body is None:
             body = pl.lit(None)
         return pl.struct(self._url.alias("url"), params.alias("params"), body.alias("body")).map_elements(
-            lambda x: self._post(x["url"], params=x["params"], body=x["body"]),
+            lambda x: self._post(x["url"], params=x["params"], body=x["body"], timeout=timeout),
             return_dtype=pl.Utf8,
         )
 
-    def aget(self, params: Optional[pl.Expr] = None) -> pl.Expr:
+    def aget(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None) -> pl.Expr:
         if params is None:
             params = pl.lit(None)
         return pl.struct(self._url.alias("url"), params.alias("params")).map_batches(
-            lambda x: self._aget(x.struct.field("url"), params=x.struct.field("params"))
+            lambda x: self._aget(x.struct.field("url"), params=x.struct.field("params"), timeout=timeout)
         )
 
-    def apost(self, params: Optional[pl.Expr] = None, body: Optional[pl.Expr] = None) -> pl.Expr:
+    def apost(
+        self, params: Optional[pl.Expr] = None, body: Optional[pl.Expr] = None, timeout: Optional[float] = None
+    ) -> pl.Expr:
         if params is None:
             params = pl.lit(None)
         if body is None:
             body = pl.lit(None)
         return pl.struct(self._url.alias("url"), params.alias("params"), body.alias("body")).map_batches(
-            lambda x: self._apost(x.struct.field("url"), params=x.struct.field("params"), body=x.struct.field("body"))
+            lambda x: self._apost(
+                x.struct.field("url"), params=x.struct.field("params"), body=x.struct.field("body"), timeout=timeout
+            )
         )
