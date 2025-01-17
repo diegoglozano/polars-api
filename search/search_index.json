@@ -1,0 +1,1 @@
+{"config":{"lang":["en"],"separator":"[\\s\\-]+","pipeline":["stopWordFilter"]},"docs":[{"location":"","title":"polars-api","text":"<p>Polars extension for dealing with REST APIs</p>"},{"location":"modules/","title":"Modules","text":""}]}
