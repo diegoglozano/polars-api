@@ -1,5 +1,7 @@
 import polars as pl
 
+import polars_api  # noqa:F401
+
 BASE_URL = "https://jsonplaceholder.typicode.com/posts"
 print(
     pl.DataFrame({
@@ -21,5 +23,6 @@ print(
         pl.col("url").api.get(params=pl.col("params")).str.json_decode().alias("get_params"),
         pl.col("url").api.post(body=pl.col("body")).str.json_decode().alias("post"),
         pl.col("url").api.apost(body=pl.col("body")).str.json_decode().alias("apost"),
+        pl.col("url").api.apost(params=pl.col("params")).alias("apost_params"),
     )
 )

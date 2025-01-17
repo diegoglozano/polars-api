@@ -43,16 +43,18 @@ class Api:
         return pl.Series(asyncio.run(self._aget_all(x, params)))
 
     @staticmethod
-    async def _apost_one(url: str, body: str) -> str:
+    async def _apost_one(url: str, params: str, body: str) -> str:
         async with httpx.AsyncClient() as client:
-            r = await client.post(url, json=body)
+            r = await client.post(url, params=params, json=body)
             return r.text
 
-    async def _apost_all(self, x, body):
-        return await asyncio.gather(*[self._apost_one(url, _body) for url, _body in zip(x, body)])
+    async def _apost_all(self, x, params, body):
+        return await asyncio.gather(*[
+            self._apost_one(url, _params, _body) for url, _params, _body in zip(x, params, body)
+        ])
 
-    def _apost(self, x, body):
-        return pl.Series(asyncio.run(self._apost_all(x, body)))
+    def _apost(self, x, params, body):
+        return pl.Series(asyncio.run(self._apost_all(x, params, body)))
 
     def get(self, params: Optional[pl.Expr] = None) -> pl.Expr:
         if params is None:
@@ -79,9 +81,11 @@ class Api:
             lambda x: self._aget(x.struct.field("url"), params=x.struct.field("params"))
         )
 
-    def apost(self, body: Optional[pl.Expr] = None) -> pl.Expr:
+    def apost(self, params: Optional[pl.Expr] = None, body: Optional[pl.Expr] = None) -> pl.Expr:
+        if params is None:
+            params = pl.lit(None)
         if body is None:
             body = pl.lit(None)
-        return pl.struct(self._url.alias("url"), body.alias("body")).map_batches(
-            lambda x: self._apost(x.struct.field("url"), body=x.struct.field("body"))
+        return pl.struct(self._url.alias("url"), params.alias("params"), body.alias("body")).map_batches(
+            lambda x: self._apost(x.struct.field("url"), params=x.struct.field("params"), body=x.struct.field("body"))
         )
