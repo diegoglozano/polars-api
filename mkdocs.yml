@@ -9,13 +9,16 @@ copyright: Maintained by <a href="https://diegoglozano.com">diegoglozano</a>.
 
 nav:
   - Home: index.md
-  - Modules: modules.md
+  - Documentation: documentation.md
+
 plugins:
   - search
   - mkdocstrings:
       handlers:
         python:
           paths: [polars_api]
+          options:
+            docstring_style: numpy
 theme:
   name: material
   feature:
