@@ -2,8 +2,12 @@ import asyncio
 from typing import Optional
 
 import httpx
-import nest_asyncio
 import polars as pl
+
+from polars_api.utils import in_notebook
+
+if in_notebook():
+    import nest_asyncio
 
 
 def _check_status_code(status_code):
@@ -327,3 +331,6 @@ class Api:
                 x.struct.field("url"), params=x.struct.field("params"), body=x.struct.field("body"), timeout=timeout
             )
         )
+
+
+pl.api.register_series_namespace("api", Api)

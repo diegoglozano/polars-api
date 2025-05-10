@@ -18,8 +18,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "asyncio>=3.4.3",
     "httpx>=0.28.1",
-    "nest-asyncio>=1.6.0",
     "polars>=1.0.0",
 ]
 
@@ -27,6 +27,11 @@ dependencies = [
 Homepage = "https://diegoglozano.github.io/polars-api/"
 Repository = "https://github.com/diegoglozano/polars-api"
 Documentation = "https://diegoglozano.github.io/polars-api/"
+
+[project.optional-dependencies]
+notebooks = [
+    "nest-asyncio>=1.6.0",
+]
 
 [dependency-groups]
 dev = [
