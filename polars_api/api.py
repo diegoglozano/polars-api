@@ -9,6 +9,8 @@ from polars_api.utils import in_notebook
 if in_notebook():
     import nest_asyncio
 
+    nest_asyncio.apply()
+
 
 def _check_status_code(status_code):
     """
@@ -294,7 +296,6 @@ class Api:
         pl.Expr
             Expression containing the response texts.
         """
-        nest_asyncio.apply()
         if params is None:
             params = pl.lit(None)
         return pl.struct(self._url.alias("url"), params.alias("params")).map_batches(
@@ -321,7 +322,6 @@ class Api:
         pl.Expr
             Expression containing the response texts.
         """
-        nest_asyncio.apply()
         if params is None:
             params = pl.lit(None)
         if body is None:
