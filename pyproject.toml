@@ -1,10 +1,21 @@
 [project]
 name = "polars-api"
 version = "0.0.1"
-description = "Polars extension for dealing with REST APIs"
+description = "Call REST APIs from a Polars DataFrame, one row at a time, using native Polars expressions. Sync and async GET/POST with per-row URLs, params, and bodies."
 authors = [{ name = "Diego Garcia Lozano", email = "diegoglozano96@gmail.com" }]
 readme = "README.md"
-keywords = ['python']
+keywords = [
+    "polars",
+    "polars-api",
+    "rest-api",
+    "http",
+    "httpx",
+    "async",
+    "dataframe",
+    "etl",
+    "data-engineering",
+    "python",
+]
 requires-python = ">=3.9,<4.0"
 classifiers = [
     "Intended Audience :: Developers",

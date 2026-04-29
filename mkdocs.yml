@@ -1,7 +1,7 @@
 site_name: polars-api
 repo_url: https://github.com/diegoglozano/polars-api
 site_url: https://diegoglozano.github.io/polars-api
-site_description: Polars extension for dealing with REST APIs
+site_description: Call REST APIs from a Polars DataFrame, one row at a time, using native Polars expressions. Sync and async GET/POST with per-row URLs, params, and bodies.
 site_author: Diego Garcia Lozano
 edit_uri: edit/main/docs/
 repo_name: diegoglozano/polars-api
@@ -9,7 +9,7 @@ copyright: Maintained by <a href="https://diegoglozano.com">diegoglozano</a>.
 
 nav:
   - Home: index.md
-  - Documentation: documentation.md
+  - API reference: documentation.md
 
 plugins:
   - search
@@ -19,6 +19,9 @@ plugins:
           paths: [polars_api]
           options:
             docstring_style: numpy
+            show_root_heading: true
+            show_source: true
+            heading_level: 2
 theme:
   name: material
   feature:
@@ -47,6 +50,9 @@ extra:
       link: https://github.com/diegoglozano/polars-api
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/polars-api
+  meta:
+    - name: keywords
+      content: polars, polars api, polars rest api, polars http, polars async, dataframe http requests, polars expression api, httpx, python rest api dataframe
 
 markdown_extensions:
   - toc:
