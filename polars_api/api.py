@@ -1,12 +1,12 @@
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 import nest_asyncio
 import polars as pl
 
 
-def _check_status_code(status_code):
+def _check_status_code(status_code: int) -> bool:
     """
     Check if the status code indicates a successful response.
 
@@ -62,7 +62,12 @@ class Api:
             return None
 
     @staticmethod
-    def _post(url: str, params: dict[str, str], body: str, timeout: float) -> Optional[str]:
+    def _post(
+        url: str,
+        params: Optional[dict[str, Any]] = None,
+        body: Any = None,
+        timeout: Optional[float] = None,
+    ) -> Optional[str]:
         """
         Perform a synchronous POST request.
 
@@ -89,7 +94,7 @@ class Api:
             return None
 
     @staticmethod
-    async def _aget_one(url: str, params: str, timeout: float) -> str:
+    async def _aget_one(url: str, params: Any, timeout: Optional[float] = None) -> str:
         """
         Perform an asynchronous GET request.
 
@@ -111,7 +116,7 @@ class Api:
             r = await client.get(url, params=params, timeout=timeout)
             return r.text
 
-    async def _aget_all(self, x, params, timeout):
+    async def _aget_all(self, x: Any, params: Any, timeout: Optional[float]) -> list[str]:
         """
         Perform multiple asynchronous GET requests.
 
@@ -131,7 +136,7 @@ class Api:
         """
         return await asyncio.gather(*[self._aget_one(url, param, timeout) for url, param in zip(x, params)])
 
-    def _aget(self, x, params, timeout):
+    def _aget(self, x: Any, params: Any, timeout: Optional[float]) -> pl.Series:
         """
         Wrapper for performing multiple asynchronous GET requests.
 
@@ -152,7 +157,7 @@ class Api:
         return pl.Series(asyncio.run(self._aget_all(x, params, timeout)))
 
     @staticmethod
-    async def _apost_one(url: str, params: str, body: str, timeout: Optional[float]) -> str:
+    async def _apost_one(url: str, params: Any, body: Any, timeout: Optional[float] = None) -> str:
         """
         Perform an asynchronous POST request.
 
@@ -176,7 +181,7 @@ class Api:
             r = await client.post(url, params=params, json=body, timeout=timeout)
             return r.text
 
-    async def _apost_all(self, x, params, body, timeout):
+    async def _apost_all(self, x: Any, params: Any, body: Any, timeout: Optional[float]) -> list[str]:
         """
         Perform multiple asynchronous POST requests.
 
@@ -200,7 +205,7 @@ class Api:
             self._apost_one(url, _params, _body, timeout) for url, _params, _body in zip(x, params, body)
         ])
 
-    def _apost(self, x, params, body, timeout):
+    def _apost(self, x: Any, params: Any, body: Any, timeout: Optional[float]) -> pl.Series:
         """
         Wrapper for performing multiple asynchronous POST requests.
 
