@@ -4,13 +4,28 @@ import re
 import time
 from typing import Any, Callable, Optional, Union
 
+import aiohttp
 import httpx
 import nest_asyncio
 import polars as pl
 
 OnError = str  # "null" | "raise" | "return"
-RequestHook = Callable[[httpx.Request], None]
-ResponseHook = Callable[[httpx.Response], None]
+
+# Sync hooks operate on httpx Request/Response objects.
+SyncRequestHook = Callable[[httpx.Request], None]
+SyncResponseHook = Callable[[httpx.Response], None]
+
+# Async hooks: aiohttp doesn't expose a stable pre-send Request object the way
+# httpx does, so the request hook receives ``(method, url, kwargs)`` —
+# essentially what we're about to pass to ``session.request``. The response
+# hook receives an ``aiohttp.ClientResponse`` while it's still open.
+AsyncRequestHook = Callable[[str, str, dict[str, Any]], None]
+AsyncResponseHook = Callable[[aiohttp.ClientResponse], None]
+
+# Backwards-compatible aliases for callers that imported these names. They now
+# refer to the sync flavours; async hooks use the explicit ``Async*`` aliases.
+RequestHook = SyncRequestHook
+ResponseHook = SyncResponseHook
 NextUrl = Callable[[httpx.Response], Optional[str]]
 
 _BASE_METADATA_FIELDS: dict[str, Any] = {
@@ -56,6 +71,20 @@ def _is_retryable_status(status: int) -> bool:
 
 def _serialize_response_headers(response: httpx.Response) -> list[dict[str, str]]:
     return [{"name": k, "value": v} for k, v in response.headers.items()]
+
+
+def _serialize_aio_headers(response: aiohttp.ClientResponse) -> list[dict[str, str]]:
+    return [{"name": k, "value": v} for k, v in response.headers.items()]
+
+
+def _retry_after_seconds_aio(response: aiohttp.ClientResponse) -> Optional[float]:
+    raw = response.headers.get("Retry-After")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
 
 
 def _result_struct(
@@ -169,26 +198,27 @@ class Api:
         return response
 
     @staticmethod
-    async def _send_async(
-        client: httpx.AsyncClient,
-        method: str,
-        url: str,
+    def _build_aio_kwargs(
         params: Optional[dict[str, Any]],
         body: Optional[dict[str, Any]],
         data: Optional[dict[str, Any]],
         headers: Optional[dict[str, Any]],
         timeout: Optional[float],
-        on_request: Optional[RequestHook],
-        on_response: Optional[ResponseHook],
-    ) -> httpx.Response:
-        kwargs = _build_request_kwargs(params, body, data, headers, timeout)
-        request = client.build_request(method, url, **kwargs)
-        if on_request is not None:
-            on_request(request)
-        response = await client.send(request)
-        if on_response is not None:
-            on_response(response)
-        return response
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {}
+        if params is not None:
+            # aiohttp's params accept str/int/float values; coerce non-strings
+            # so behaviour matches httpx.
+            kwargs["params"] = {k: v if isinstance(v, str) else str(v) for k, v in params.items()}
+        if headers is not None:
+            kwargs["headers"] = headers
+        if body is not None:
+            kwargs["json"] = body
+        if data is not None:
+            kwargs["data"] = data
+        if timeout is not None:
+            kwargs["timeout"] = aiohttp.ClientTimeout(total=timeout)
+        return kwargs
 
     @classmethod
     def _sync_one(
@@ -274,7 +304,7 @@ class Api:
     @classmethod
     async def _async_attempt(
         cls,
-        client: httpx.AsyncClient,
+        session: aiohttp.ClientSession,
         method: str,
         url: str,
         params: Optional[dict[str, Any]],
@@ -287,24 +317,22 @@ class Api:
         backoff: float,
         start: float,
         with_response_headers: bool,
-        on_request: Optional[RequestHook],
-        on_response: Optional[ResponseHook],
+        on_request: Optional[AsyncRequestHook],
+        on_response: Optional[AsyncResponseHook],
     ) -> tuple[Optional[dict[str, Any]], Optional[float]]:
         attempt_start = time.monotonic()
+        kwargs = cls._build_aio_kwargs(params, body, data, headers, timeout)
         try:
-            response = await cls._send_async(
-                client,
-                method,
-                url,
-                params,
-                body,
-                data,
-                headers,
-                timeout,
-                on_request,
-                on_response,
-            )
-        except httpx.HTTPError as exc:
+            if on_request is not None:
+                on_request(method, url, kwargs)
+            async with session.request(method, url, **kwargs) as response:
+                if on_response is not None:
+                    on_response(response)
+                status = response.status
+                text = await response.text()
+                resp_headers = _serialize_aio_headers(response) if with_response_headers else None
+                retry_after = _retry_after_seconds_aio(response)
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             if attempt < retries:
                 wait = backoff * (2**attempt) if backoff > 0 else 0.0
                 return None, wait
@@ -317,10 +345,7 @@ class Api:
                 include_response_headers=with_response_headers,
             ), None
 
-        status = response.status_code
-        text = response.text
-        resp_headers = _serialize_response_headers(response) if with_response_headers else None
-        if response.is_success:
+        if 200 <= status < 300:
             elapsed_ms = (time.monotonic() - start) * 1000
             return _result_struct(
                 text,
@@ -331,9 +356,7 @@ class Api:
                 include_response_headers=with_response_headers,
             ), None
         if attempt < retries and _is_retryable_status(status):
-            wait = _retry_after_seconds(response)
-            if wait is None:
-                wait = backoff * (2**attempt) if backoff > 0 else 0.0
+            wait = retry_after if retry_after is not None else (backoff * (2**attempt) if backoff > 0 else 0.0)
             return None, wait
         elapsed_ms = (time.monotonic() - start) * 1000
         return _result_struct(
@@ -348,7 +371,7 @@ class Api:
     @classmethod
     async def _async_one(
         cls,
-        client: httpx.AsyncClient,
+        session: aiohttp.ClientSession,
         semaphore: Optional[asyncio.Semaphore],
         method: str,
         url: str,
@@ -360,15 +383,15 @@ class Api:
         retries: int,
         backoff: float,
         with_response_headers: bool,
-        on_request: Optional[RequestHook],
-        on_response: Optional[ResponseHook],
+        on_request: Optional[AsyncRequestHook],
+        on_response: Optional[AsyncResponseHook],
     ) -> dict[str, Any]:
         async def _go() -> dict[str, Any]:
             attempt = 0
             start = time.monotonic()
             while True:
                 result, wait = await cls._async_attempt(
-                    client,
+                    session,
                     method,
                     url,
                     params,
@@ -504,15 +527,15 @@ class Api:
         method: str,
         rows: list[tuple[str, Any, Any, Any, Any]],
         *,
-        client: Optional[httpx.AsyncClient],
+        client: Optional[aiohttp.ClientSession],
         timeout: Optional[float],
         retries: int,
         backoff: float,
         max_concurrency: Optional[int],
         cache: bool,
         with_response_headers: bool,
-        on_request: Optional[RequestHook],
-        on_response: Optional[ResponseHook],
+        on_request: Optional[AsyncRequestHook],
+        on_response: Optional[AsyncResponseHook],
     ) -> list[dict[str, Any]]:
         semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
@@ -533,12 +556,18 @@ class Api:
                 result_index[i] = len(order)
                 order.append(i)
 
-        own_client = client is None
-        cli: httpx.AsyncClient = httpx.AsyncClient() if own_client else client  # type: ignore[assignment]
+        own_session = client is None
+        if own_session:
+            # Size the connection pool to the requested concurrency so we don't
+            # bottleneck on aiohttp's default pool limit (100). 0 == unlimited.
+            connector = aiohttp.TCPConnector(limit=max_concurrency or 0)
+            sess = aiohttp.ClientSession(connector=connector)
+        else:
+            sess = client  # type: ignore[assignment]
         try:
             tasks = [
                 cls._async_one(
-                    cli,
+                    sess,
                     semaphore,
                     method,
                     rows[idx][0],
@@ -557,8 +586,8 @@ class Api:
             ]
             unique_results = await asyncio.gather(*tasks)
         finally:
-            if own_client:
-                await cli.aclose()
+            if own_session:
+                await sess.close()
         return [unique_results[result_index[i]] for i in range(len(rows))]
 
     @staticmethod
@@ -684,7 +713,7 @@ class Api:
         data: Optional[pl.Expr],
         headers: Optional[pl.Expr],
         *,
-        client: Optional[httpx.AsyncClient],
+        client: Optional[aiohttp.ClientSession],
         timeout: Optional[float],
         retries: int,
         backoff: float,
@@ -693,8 +722,8 @@ class Api:
         with_metadata: bool,
         with_response_headers: bool,
         on_error: OnError,
-        on_request: Optional[RequestHook],
-        on_response: Optional[ResponseHook],
+        on_request: Optional[AsyncRequestHook],
+        on_response: Optional[AsyncResponseHook],
     ) -> pl.Expr:
         return_dtype = _metadata_dtype(with_response_headers) if with_metadata else pl.Utf8
         return self._input_struct(params, body, data, headers).map_batches(
@@ -774,7 +803,7 @@ class Api:
         *,
         data: Optional[pl.Expr] = None,
         headers: Optional[pl.Expr] = None,
-        client: Optional[httpx.AsyncClient] = None,
+        client: Optional[aiohttp.ClientSession] = None,
         timeout: Optional[float] = None,
         retries: int = 0,
         backoff: float = 0.0,
@@ -783,8 +812,8 @@ class Api:
         with_metadata: bool = False,
         with_response_headers: bool = False,
         on_error: OnError = "null",
-        on_request: Optional[RequestHook] = None,
-        on_response: Optional[ResponseHook] = None,
+        on_request: Optional[AsyncRequestHook] = None,
+        on_response: Optional[AsyncResponseHook] = None,
         auth: Optional[tuple[str, str]] = None,
         bearer: Optional[Union[str, pl.Expr]] = None,
         api_key: Optional[Union[str, pl.Expr]] = None,

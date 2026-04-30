@@ -51,7 +51,8 @@ def server():
             time.sleep(0.05)
     else:
         proc.terminate()
-        raise RuntimeError("server failed to start")
+        msg = "server failed to start"
+        raise RuntimeError(msg)
     try:
         yield
     finally:
@@ -120,15 +121,23 @@ def bench_polars_api(n: int, concurrency: int) -> float:
 
 
 def bench_polars_api_shared_client(n: int, concurrency: int) -> float:
-    """Same as polars-api but reusing an AsyncClient across the call (default limits)."""
-    client = httpx.AsyncClient()
+    """Same as polars-api but reusing an aiohttp.ClientSession across the call.
+
+    Sessions must be created inside an event loop, so we build / tear down the
+    session in the same loop the polars-api call will use via nest_asyncio.
+    """
     df = pl.DataFrame({"url": urls(n)})
+
+    async def _build():
+        return aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=concurrency))
+
+    session = asyncio.run(_build())
     start = time.monotonic()
     df.with_columns(
-        pl.col("url").api.aget(client=client, max_concurrency=concurrency).alias("body")
+        pl.col("url").api.aget(client=session, max_concurrency=concurrency).alias("body")
     )
     elapsed = time.monotonic() - start
-    asyncio.run(client.aclose())
+    asyncio.run(session.close())
     return elapsed
 
 
@@ -136,10 +145,7 @@ def bench_polars_api_shared_client(n: int, concurrency: int) -> float:
 def run(label: str, fn, n: int, concurrency: int, repeats: int) -> tuple[float, float]:
     times = []
     for _ in range(repeats):
-        if asyncio.iscoroutinefunction(fn):
-            t = asyncio.run(fn(n, concurrency))
-        else:
-            t = fn(n, concurrency)
+        t = asyncio.run(fn(n, concurrency)) if asyncio.iscoroutinefunction(fn) else fn(n, concurrency)
         times.append(t)
     median = statistics.median(times)
     rps = n / median if median > 0 else float("inf")

@@ -11,11 +11,12 @@ A running list of features to consider for `polars-api`. Ordered roughly by valu
 - More verbs: `put` / `patch` / `delete` / `head` (and async siblings).
 - Auth helpers: `auth=("user", "pass")`, `bearer=...`, `api_key=...` with `api_key_header=...`.
 - Structured error handling: `on_error="null" | "raise" | "return"`.
-- Shared client / connection pooling: pass `client=httpx.Client(...)` or `client=httpx.AsyncClient(...)`. The default sync path now uses a shared `httpx.Client` per batch instead of opening a connection per row.
+- Shared client / connection pooling: pass `client=httpx.Client(...)` (sync) or `client=aiohttp.ClientSession(...)` (async). The default sync path uses a shared `httpx.Client` per batch instead of opening a connection per row.
 - In-batch response caching: `cache=True` memoizes identical `(method, url, params, body, data, headers)` tuples within a batch.
 - Form-encoded bodies: `data=` parameter.
 - Response headers in metadata: `with_response_headers=True` adds `response_headers: List[Struct{name, value}]` to the metadata struct.
-- Lifecycle hooks: `on_request` / `on_response` callbacks (receive `httpx.Request` / `httpx.Response`).
+- Lifecycle hooks: `on_request` / `on_response` callbacks. Sync verbs receive `httpx.Request` / `httpx.Response`; async verbs receive `(method, url, kwargs)` / `aiohttp.ClientResponse`.
+- Aiohttp-based async path: ~10× higher throughput than httpx at high concurrency.
 - Pagination helper: `paginate(...)` follows `Link: rel="next"` by default, accepts a custom `next_url=` callable, and returns `List[Utf8]` of bodies per row.
 
 ## Remaining

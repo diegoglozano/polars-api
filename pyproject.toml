@@ -29,6 +29,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "aiohttp>=3.9",
     "httpx>=0.28.1",
     "nest-asyncio>=1.6.0",
     "polars>=1.0.0",

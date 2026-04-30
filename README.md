@@ -34,7 +34,7 @@ import polars_api  # noqa: F401  — registers the `.api` namespace
 - **Expression-native** — works inside `with_columns`, `select`, and any other Polars expression context. No `for` loops, no manual `apply`.
 - **Sync and async out of the box** — async variants (`aget` / `apost`) fan out requests with `asyncio.gather` for high-throughput enrichment.
 - **Per-row URLs, params, and bodies** — every argument can be a Polars expression, so you can build them from other columns.
-- **Powered by [httpx](https://www.python-httpx.org/)** — modern, dependable HTTP client with timeouts and HTTP/2 ready.
+- **Built on [httpx](https://www.python-httpx.org/) (sync) and [aiohttp](https://docs.aiohttp.org/) (async)** — async fan-out uses aiohttp for ~10× higher throughput at high concurrency.
 - **Tiny surface area** — four methods (`get`, `aget`, `post`, `apost`) you already know how to use.
 
 Common use cases:
@@ -114,7 +114,7 @@ df = (
 
 ### 4. Async requests for throughput
 
-`aget` and `apost` use `asyncio.gather` under the hood, so requests run concurrently per batch:
+`aget` and `apost` fan out with `aiohttp` and `asyncio.gather`, so requests run concurrently per batch. In benchmarks against a local server, this is roughly an order of magnitude faster than the sync path at high concurrency:
 
 ```python
 df = (
@@ -127,7 +127,7 @@ df = (
 
 ### 5. Timeouts
 
-Every method accepts a `timeout` (in seconds), forwarded to `httpx`:
+Every method accepts a `timeout` (in seconds). Sync verbs forward it to `httpx`; async verbs wrap it in `aiohttp.ClientTimeout(total=...)`.
 
 ```python
 pl.col("url").api.get(timeout=5.0)
@@ -153,7 +153,7 @@ Arguments (all keyword-only after the positional `params` / `body`):
 - **`body`** _(POST/PUT/PATCH only)_ — Polars expression yielding a struct serialized as a JSON body per row.
 - **`data`** — Polars expression yielding a struct serialized as `application/x-www-form-urlencoded`.
 - **`headers`** — Polars expression yielding a struct of headers per row (e.g. tenant IDs, custom auth).
-- **`client`** — preconfigured `httpx.Client` / `httpx.AsyncClient` to enable connection reuse, HTTP/2, `base_url`, cookies, and custom transports.
+- **`client`** — preconfigured `httpx.Client` (sync verbs) or `aiohttp.ClientSession` (async verbs) for connection reuse, custom timeouts, base URLs, cookies, etc.
 - **`timeout`** — request timeout in seconds.
 - **`retries`** _(int, default 0)_ — retry on connection errors, timeouts, 5xx, and 429.
 - **`backoff`** _(float, default 0.0)_ — exponential backoff base (seconds). 429s respect `Retry-After` if present.
@@ -162,7 +162,9 @@ Arguments (all keyword-only after the positional `params` / `body`):
 - **`with_metadata`** _(bool, default False)_ — return a struct `{body, status, elapsed_ms, error}` per row instead of just the body.
 - **`with_response_headers`** _(bool, default False)_ — when `with_metadata=True`, also include `response_headers: List[Struct{name, value}]` on the struct.
 - **`on_error`** _("null" | "raise" | "return")_ — when `with_metadata=False`, what to do on non-2xx / network errors.
-- **`on_request`**, **`on_response`** — callables that receive the `httpx.Request` / `httpx.Response`. Useful for logging, metrics, and tracing.
+- **`on_request`**, **`on_response`** — observability hooks.
+  - Sync verbs: receive `httpx.Request` and `httpx.Response`.
+  - Async verbs: `on_request(method, url, kwargs)` (the args about to be sent) and `on_response(aiohttp.ClientResponse)`.
 - **`auth=("user", "pass")`** — basic auth.
 - **`bearer=pl.col("token")`** — per-row bearer token (also accepts a literal string).
 - **`api_key=...`**, **`api_key_header="X-API-Key"`** — shorthand for an API-key header.
@@ -189,9 +191,9 @@ pl.col("url").api.aget(
 # Inspect status, timing, errors and response headers
 pl.col("url").api.get(with_metadata=True, with_response_headers=True)
 
-# Bring your own client (HTTP/2, keep-alive, base_url, etc.)
-client = httpx.AsyncClient(http2=True, base_url="https://api.example.com")
-pl.col("path").api.aget(client=client)
+# Bring your own session (connector tuning, base_url, cookies, etc.)
+session = aiohttp.ClientSession(base_url="https://api.example.com")
+pl.col("path").api.aget(client=session)
 
 # Skip duplicate URLs within a batch (e.g. after a join/explode)
 pl.col("url").api.aget(cache=True)
