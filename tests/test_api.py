@@ -387,10 +387,12 @@ def test_on_request_and_on_response_hooks(monkeypatch: pytest.MonkeyPatch) -> No
 
     df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]})
     df.with_columns(
-        pl.col("url").api.get(
+        pl.col("url")
+        .api.get(
             on_request=lambda r: requests_seen.append(str(r.url)),
             on_response=lambda r: statuses_seen.append(r.status_code),
-        ).alias("r"),
+        )
+        .alias("r"),
     ).collect_schema()
 
     assert sorted(requests_seen) == ["http://x/a", "http://x/b"]

@@ -213,18 +213,30 @@ class Api:
             attempt_start = time.monotonic()
             try:
                 response = cls._send_sync(
-                    client, method, url, params, body, data, headers, timeout, on_request, on_response,
+                    client,
+                    method,
+                    url,
+                    params,
+                    body,
+                    data,
+                    headers,
+                    timeout,
+                    on_request,
+                    on_response,
                 )
             except httpx.HTTPError as exc:
                 if attempt < retries:
-                    wait = backoff * (2 ** attempt) if backoff > 0 else 0.0
+                    wait = backoff * (2**attempt) if backoff > 0 else 0.0
                     if wait > 0:
                         time.sleep(wait)
                     attempt += 1
                     continue
                 elapsed_ms = (time.monotonic() - attempt_start) * 1000
                 return _result_struct(
-                    None, 0, elapsed_ms, f"{type(exc).__name__}: {exc}",
+                    None,
+                    0,
+                    elapsed_ms,
+                    f"{type(exc).__name__}: {exc}",
                     include_response_headers=with_response_headers,
                 )
 
@@ -234,20 +246,28 @@ class Api:
             if response.is_success:
                 elapsed_ms = (time.monotonic() - start) * 1000
                 return _result_struct(
-                    text, status, elapsed_ms, None, resp_headers,
+                    text,
+                    status,
+                    elapsed_ms,
+                    None,
+                    resp_headers,
                     include_response_headers=with_response_headers,
                 )
             if attempt < retries and _is_retryable_status(status):
                 wait = _retry_after_seconds(response)
                 if wait is None:
-                    wait = backoff * (2 ** attempt) if backoff > 0 else 0.0
+                    wait = backoff * (2**attempt) if backoff > 0 else 0.0
                 if wait > 0:
                     time.sleep(wait)
                 attempt += 1
                 continue
             elapsed_ms = (time.monotonic() - start) * 1000
             return _result_struct(
-                text, status, elapsed_ms, f"HTTP {status}", resp_headers,
+                text,
+                status,
+                elapsed_ms,
+                f"HTTP {status}",
+                resp_headers,
                 include_response_headers=with_response_headers,
             )
 
@@ -273,15 +293,27 @@ class Api:
         attempt_start = time.monotonic()
         try:
             response = await cls._send_async(
-                client, method, url, params, body, data, headers, timeout, on_request, on_response,
+                client,
+                method,
+                url,
+                params,
+                body,
+                data,
+                headers,
+                timeout,
+                on_request,
+                on_response,
             )
         except httpx.HTTPError as exc:
             if attempt < retries:
-                wait = backoff * (2 ** attempt) if backoff > 0 else 0.0
+                wait = backoff * (2**attempt) if backoff > 0 else 0.0
                 return None, wait
             elapsed_ms = (time.monotonic() - attempt_start) * 1000
             return _result_struct(
-                None, 0, elapsed_ms, f"{type(exc).__name__}: {exc}",
+                None,
+                0,
+                elapsed_ms,
+                f"{type(exc).__name__}: {exc}",
                 include_response_headers=with_response_headers,
             ), None
 
@@ -291,17 +323,25 @@ class Api:
         if response.is_success:
             elapsed_ms = (time.monotonic() - start) * 1000
             return _result_struct(
-                text, status, elapsed_ms, None, resp_headers,
+                text,
+                status,
+                elapsed_ms,
+                None,
+                resp_headers,
                 include_response_headers=with_response_headers,
             ), None
         if attempt < retries and _is_retryable_status(status):
             wait = _retry_after_seconds(response)
             if wait is None:
-                wait = backoff * (2 ** attempt) if backoff > 0 else 0.0
+                wait = backoff * (2**attempt) if backoff > 0 else 0.0
             return None, wait
         elapsed_ms = (time.monotonic() - start) * 1000
         return _result_struct(
-            text, status, elapsed_ms, f"HTTP {status}", resp_headers,
+            text,
+            status,
+            elapsed_ms,
+            f"HTTP {status}",
+            resp_headers,
             include_response_headers=with_response_headers,
         ), None
 
@@ -328,8 +368,21 @@ class Api:
             start = time.monotonic()
             while True:
                 result, wait = await cls._async_attempt(
-                    client, method, url, params, body, data, headers, timeout,
-                    attempt, retries, backoff, start, with_response_headers, on_request, on_response,
+                    client,
+                    method,
+                    url,
+                    params,
+                    body,
+                    data,
+                    headers,
+                    timeout,
+                    attempt,
+                    retries,
+                    backoff,
+                    start,
+                    with_response_headers,
+                    on_request,
+                    on_response,
                 )
                 if result is not None:
                     return result
@@ -364,12 +417,20 @@ class Api:
         while True:
             try:
                 response = cls._send_sync(
-                    client, method, url, params, body, data, headers, timeout,
-                    on_request, on_response,
+                    client,
+                    method,
+                    url,
+                    params,
+                    body,
+                    data,
+                    headers,
+                    timeout,
+                    on_request,
+                    on_response,
                 )
             except httpx.HTTPError:
                 if attempt < retries:
-                    wait = backoff * (2 ** attempt) if backoff > 0 else 0.0
+                    wait = backoff * (2**attempt) if backoff > 0 else 0.0
                     if wait > 0:
                         time.sleep(wait)
                     attempt += 1
@@ -380,7 +441,7 @@ class Api:
             if attempt < retries and _is_retryable_status(response.status_code):
                 wait = _retry_after_seconds(response)
                 if wait is None:
-                    wait = backoff * (2 ** attempt) if backoff > 0 else 0.0
+                    wait = backoff * (2**attempt) if backoff > 0 else 0.0
                 if wait > 0:
                     time.sleep(wait)
                 attempt += 1
@@ -415,8 +476,19 @@ class Api:
                         results[i] = memo[key]
                         continue
                 result = cls._sync_one(
-                    cli, method, url, params, body, data, headers, timeout,
-                    retries, backoff, with_response_headers, on_request, on_response,
+                    cli,
+                    method,
+                    url,
+                    params,
+                    body,
+                    data,
+                    headers,
+                    timeout,
+                    retries,
+                    backoff,
+                    with_response_headers,
+                    on_request,
+                    on_response,
                 )
                 if cache and key is not None:
                     memo[key] = result
@@ -466,9 +538,20 @@ class Api:
         try:
             tasks = [
                 cls._async_one(
-                    cli, semaphore, method,
-                    rows[idx][0], rows[idx][1], rows[idx][2], rows[idx][3], rows[idx][4],
-                    timeout, retries, backoff, with_response_headers, on_request, on_response,
+                    cli,
+                    semaphore,
+                    method,
+                    rows[idx][0],
+                    rows[idx][1],
+                    rows[idx][2],
+                    rows[idx][3],
+                    rows[idx][4],
+                    timeout,
+                    retries,
+                    backoff,
+                    with_response_headers,
+                    on_request,
+                    on_response,
                 )
                 for idx in order
             ]
@@ -575,10 +658,16 @@ class Api:
         return self._input_struct(params, body, data, headers).map_batches(
             lambda s: self._results_to_series(
                 self._sync_batch(
-                    method, self._rows_from_struct(s),
-                    client=client, timeout=timeout, retries=retries, backoff=backoff,
-                    cache=cache, with_response_headers=with_response_headers,
-                    on_request=on_request, on_response=on_response,
+                    method,
+                    self._rows_from_struct(s),
+                    client=client,
+                    timeout=timeout,
+                    retries=retries,
+                    backoff=backoff,
+                    cache=cache,
+                    with_response_headers=with_response_headers,
+                    on_request=on_request,
+                    on_response=on_response,
                 ),
                 with_metadata=with_metadata,
                 with_response_headers=with_response_headers,
@@ -610,13 +699,21 @@ class Api:
         return_dtype = _metadata_dtype(with_response_headers) if with_metadata else pl.Utf8
         return self._input_struct(params, body, data, headers).map_batches(
             lambda s: self._results_to_series(
-                _arun(self._async_many(
-                    method, self._rows_from_struct(s),
-                    client=client, timeout=timeout, retries=retries, backoff=backoff,
-                    max_concurrency=max_concurrency, cache=cache,
-                    with_response_headers=with_response_headers,
-                    on_request=on_request, on_response=on_response,
-                )),
+                _arun(
+                    self._async_many(
+                        method,
+                        self._rows_from_struct(s),
+                        client=client,
+                        timeout=timeout,
+                        retries=retries,
+                        backoff=backoff,
+                        max_concurrency=max_concurrency,
+                        cache=cache,
+                        with_response_headers=with_response_headers,
+                        on_request=on_request,
+                        on_response=on_response,
+                    )
+                ),
                 with_metadata=with_metadata,
                 with_response_headers=with_response_headers,
                 on_error=on_error,
@@ -652,10 +749,21 @@ class Api:
         """Issue a synchronous HTTP request per row."""
         merged_headers = self._build_headers_expr(headers, auth, bearer, api_key, api_key_header)
         return self._sync_call(
-            method.upper(), params, body, data, merged_headers,
-            client=client, timeout=timeout, retries=retries, backoff=backoff,
-            cache=cache, with_metadata=with_metadata, with_response_headers=with_response_headers,
-            on_error=on_error, on_request=on_request, on_response=on_response,
+            method.upper(),
+            params,
+            body,
+            data,
+            merged_headers,
+            client=client,
+            timeout=timeout,
+            retries=retries,
+            backoff=backoff,
+            cache=cache,
+            with_metadata=with_metadata,
+            with_response_headers=with_response_headers,
+            on_error=on_error,
+            on_request=on_request,
+            on_response=on_response,
         )
 
     def arequest(
@@ -685,11 +793,22 @@ class Api:
         """Issue concurrent asynchronous HTTP requests across the batch."""
         merged_headers = self._build_headers_expr(headers, auth, bearer, api_key, api_key_header)
         return self._async_call(
-            method.upper(), params, body, data, merged_headers,
-            client=client, timeout=timeout, retries=retries, backoff=backoff,
-            max_concurrency=max_concurrency, cache=cache,
-            with_metadata=with_metadata, with_response_headers=with_response_headers,
-            on_error=on_error, on_request=on_request, on_response=on_response,
+            method.upper(),
+            params,
+            body,
+            data,
+            merged_headers,
+            client=client,
+            timeout=timeout,
+            retries=retries,
+            backoff=backoff,
+            max_concurrency=max_concurrency,
+            cache=cache,
+            with_metadata=with_metadata,
+            with_response_headers=with_response_headers,
+            on_error=on_error,
+            on_request=on_request,
+            on_response=on_response,
         )
 
     # ---- Verb wrappers (sync) ----
@@ -821,8 +940,18 @@ class Api:
             current_url, current_params = url, p
             for _ in range(max_pages):
                 response = self._send_sync_with_retries(
-                    cli, verb, current_url, current_params, None, None, h, timeout,
-                    retries, backoff, on_request, on_response,
+                    cli,
+                    verb,
+                    current_url,
+                    current_params,
+                    None,
+                    None,
+                    h,
+                    timeout,
+                    retries,
+                    backoff,
+                    on_request,
+                    on_response,
                 )
                 if response is None:
                     break

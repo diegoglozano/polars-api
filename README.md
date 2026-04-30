@@ -138,14 +138,14 @@ pl.col("url").api.apost(body=pl.col("body"), timeout=10.0)
 
 All methods live under the `.api` namespace on any Polars expression that resolves to a URL string.
 
-| Method            | HTTP verb           | Mode  |
-| ----------------- | ------------------- | ----- |
-| `get` / `aget`    | GET                 | sync / async |
-| `post` / `apost`  | POST                | sync / async |
-| `put` / `aput`    | PUT                 | sync / async |
-| `patch` / `apatch`| PATCH               | sync / async |
-| `delete` / `adelete` | DELETE           | sync / async |
-| `head` / `ahead`  | HEAD                | sync / async |
+| Method               | HTTP verb | Mode         |
+| -------------------- | --------- | ------------ |
+| `get` / `aget`       | GET       | sync / async |
+| `post` / `apost`     | POST      | sync / async |
+| `put` / `aput`       | PUT       | sync / async |
+| `patch` / `apatch`   | PATCH     | sync / async |
+| `delete` / `adelete` | DELETE    | sync / async |
+| `head` / `ahead`     | HEAD      | sync / async |
 
 Arguments (all keyword-only after the positional `params` / `body`):
 
