@@ -9,7 +9,7 @@
 
 **Call REST APIs from a [Polars](https://pola.rs) DataFrame, one row at a time, using native Polars expressions.**
 
-`polars-api` registers an `.api` namespace on Polars expressions so you can issue HTTP `GET` and `POST` requests for every row of a DataFrame — synchronously or asynchronously — and pipe the responses straight back into your data pipeline.
+`polars-api` registers an `.api` namespace on Polars expressions so you can issue HTTP requests (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`) for every row of a DataFrame — synchronously or asynchronously — and pipe the responses straight back into your data pipeline.
 
 ```python
 import polars as pl
@@ -32,10 +32,10 @@ import polars_api  # noqa: F401  — registers the `.api` namespace
 ## Why polars-api?
 
 - **Expression-native** — works inside `with_columns`, `select`, and any other Polars expression context. No `for` loops, no manual `apply`.
-- **Sync and async out of the box** — async variants (`aget` / `apost`) fan out requests with `asyncio.gather` for high-throughput enrichment.
-- **Per-row URLs, params, and bodies** — every argument can be a Polars expression, so you can build them from other columns.
-- **Powered by [httpx](https://www.python-httpx.org/)** — modern, dependable HTTP client with timeouts and HTTP/2 ready.
-- **Tiny surface area** — four methods (`get`, `aget`, `post`, `apost`) you already know how to use.
+- **Sync and async out of the box** — async variants (`aget`, `apost`, `aput`, `apatch`, `adelete`, `ahead`) fan out requests with `asyncio.gather` for high-throughput enrichment, with an optional `max_concurrency` cap.
+- **Per-row URLs, params, bodies, headers, and auth** — every argument can be a Polars expression, so you can build them from other columns.
+- **Production-ready by default** — retries with exponential backoff (incl. `Retry-After`), in-batch response caching, timing/error metadata, lifecycle hooks, and `Link: rel="next"` pagination.
+- **Powered by [httpx](https://www.python-httpx.org/)** — modern HTTP client with HTTP/2, connection pooling, and pluggable transports. Bring your own preconfigured `httpx.Client` / `AsyncClient` via `client=...`.
 
 Common use cases:
 
@@ -207,7 +207,7 @@ df.with_columns(
 - **Decode JSON immediately**: chain `.str.json_decode()` and then `.struct.unnest()` (or `pl.col("response").struct.field("…")`) to flatten the result.
 - **Build URLs from columns**: use Polars string concatenation or `pl.format("https://api.example.com/users/{}", pl.col("user_id"))` to build per-row URLs.
 - **Prefer `aget` / `apost` for many rows**: async variants run requests concurrently and are typically much faster for I/O-bound workloads.
-- **Inspect failures**: the sync helpers return `null` for non-2xx responses; check for nulls in the resulting column before decoding.
+- **Inspect failures**: by default, non-2xx responses become `null`. Use `with_metadata=True` to keep the body, status, elapsed time and error string, or `on_error="raise"` / `on_error="return"` to change null-on-failure behavior.
 
 ## FAQ
 
@@ -218,13 +218,13 @@ Yes — that is exactly what `polars-api` is for. Import the package and call `.
 Place the URLs in a column and use `pl.col("url").api.get()` (or `aget` for async). Optional `params` and `body` arguments accept Polars expressions, so they can vary by row.
 
 **Does it support async / concurrent requests?**
-Yes. `aget` and `apost` issue requests concurrently with `asyncio.gather`, which is significantly faster than the sync variants when you have more than a handful of rows.
+Yes. The async variants (`aget`, `apost`, `aput`, `apatch`, `adelete`, `ahead`) issue requests concurrently with `asyncio.gather`, which is significantly faster than the sync variants when you have more than a handful of rows. Use `max_concurrency=N` to cap in-flight requests.
 
 **Is it lazy-frame compatible?**
 Yes — because everything is built on Polars expressions, you can use it in `LazyFrame.with_columns(...)` pipelines.
 
 **What does it return?**
-A `Utf8` column with the raw response body. Pipe it through `.str.json_decode()` to parse JSON responses.
+By default, a `Utf8` column with the raw response body — pipe it through `.str.json_decode()` to parse JSON responses. Pass `with_metadata=True` to get a struct `{body, status, elapsed_ms, error}` per row instead. `paginate(...)` returns a `List[Utf8]` of bodies that you can `.explode(...)` to flatten paginated results.
 
 ## Contributing
 

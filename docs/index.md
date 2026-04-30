@@ -1,6 +1,6 @@
 ---
 title: polars-api — REST API calls from Polars DataFrames
-description: Call REST APIs from a Polars DataFrame, one row at a time, using native Polars expressions. Supports sync and async GET/POST with per-row URLs, params, and bodies.
+description: Call REST APIs from a Polars DataFrame, one row at a time, using native Polars expressions. Sync and async GET/POST/PUT/PATCH/DELETE/HEAD with per-row URLs, params, bodies, headers, auth, retries, caching, hooks, and pagination.
 ---
 
 # polars-api
@@ -13,7 +13,7 @@ description: Call REST APIs from a Polars DataFrame, one row at a time, using na
 
 **Call REST APIs from a [Polars](https://pola.rs) DataFrame, one row at a time, using native Polars expressions.**
 
-`polars-api` registers an `.api` namespace on Polars expressions so you can issue HTTP `GET` and `POST` requests for every row of a DataFrame — synchronously or asynchronously — and pipe the responses straight back into your data pipeline.
+`polars-api` registers an `.api` namespace on Polars expressions so you can issue HTTP requests (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`) for every row of a DataFrame — synchronously or asynchronously — and pipe the responses straight back into your data pipeline.
 
 ```python
 import polars as pl
@@ -30,10 +30,10 @@ import polars_api  # noqa: F401  — registers the `.api` namespace
 ## Why polars-api?
 
 - **Expression-native** — works inside `with_columns`, `select`, and any other Polars expression context.
-- **Sync and async** — async variants (`aget` / `apost`) fan out requests with `asyncio.gather` for high-throughput enrichment.
-- **Per-row URLs, params, and bodies** — every argument can be a Polars expression.
-- **Powered by [httpx](https://www.python-httpx.org/)** — modern HTTP client with timeouts.
-- **Tiny surface area** — four methods you already know how to use.
+- **Sync and async** — six verbs each, fanning out concurrent requests with `asyncio.gather` (and an optional `max_concurrency` cap).
+- **Per-row everything** — URLs, params, JSON / form bodies, headers, and auth tokens can each be a Polars expression.
+- **Production-ready** — retries with exponential backoff (incl. `Retry-After`), in-batch response caching, timing / error metadata, lifecycle hooks, and `Link: rel="next"` pagination.
+- **Powered by [httpx](https://www.python-httpx.org/)** — bring your own preconfigured `httpx.Client` / `AsyncClient` for HTTP/2, connection pooling, `base_url`, cookies, and custom transports.
 
 ## Install
 
@@ -85,22 +85,66 @@ import polars_api  # noqa: F401
 ### Async for throughput
 
 ```python
-pl.col("url").api.aget()                  # concurrent GET
-pl.col("url").api.apost(body=pl.col("body"))  # concurrent POST
+pl.col("url").api.aget()                              # concurrent GET
+pl.col("url").api.apost(body=pl.col("body"))          # concurrent POST
+pl.col("url").api.aget(max_concurrency=10)            # cap in-flight requests
+```
+
+### Per-row headers and auth
+
+```python
+pl.col("url").api.aget(
+    headers=pl.struct(pl.col("tenant").alias("X-Tenant")),
+    bearer=pl.col("token"),     # per-row Authorization: Bearer ...
+    retries=3,
+    backoff=0.5,
+)
+```
+
+### Inspect status, timing, and errors
+
+```python
+pl.col("url").api.get(with_metadata=True, with_response_headers=True)
+# → struct {body, status, elapsed_ms, error, response_headers}
+```
+
+### Bring your own client (HTTP/2, base_url, keep-alive)
+
+```python
+import httpx
+client = httpx.AsyncClient(http2=True, base_url="https://api.example.com")
+pl.col("path").api.aget(client=client)
+```
+
+### Skip duplicate requests within a batch
+
+```python
+pl.col("url").api.aget(cache=True)   # memoize identical (method, url, params, body, data, headers)
+```
+
+### Follow `Link: rel="next"` pagination
+
+```python
+df.with_columns(
+    pl.col("url").api.paginate(max_pages=20).alias("pages")
+).explode("pages")
 ```
 
 ## Methods
 
-| Method  | HTTP verb | Mode  |
-| ------- | --------- | ----- |
-| `get`   | GET       | sync  |
-| `aget`  | GET       | async |
-| `post`  | POST      | sync  |
-| `apost` | POST      | async |
+| Method               | HTTP verb | Mode         |
+| -------------------- | --------- | ------------ |
+| `get` / `aget`       | GET       | sync / async |
+| `post` / `apost`     | POST      | sync / async |
+| `put` / `aput`       | PUT       | sync / async |
+| `patch` / `apatch`   | PATCH     | sync / async |
+| `delete` / `adelete` | DELETE    | sync / async |
+| `head` / `ahead`     | HEAD      | sync / async |
+| `request`            | any       | sync         |
+| `arequest`           | any       | async        |
+| `paginate`           | any       | sync         |
 
-All methods accept optional `params` (struct expression for query string), `timeout` (seconds), and POST methods additionally accept `body` (struct expression serialized as JSON). Each returns a `Utf8` expression with the response body — pipe it through `.str.json_decode()` to parse JSON.
-
-See the full [API reference](documentation.md).
+All verb wrappers accept the same keyword arguments: `params`, `body`, `data`, `headers`, `client`, `timeout`, `retries`, `backoff`, `max_concurrency` (async only), `cache`, `with_metadata`, `with_response_headers`, `on_error`, `on_request`, `on_response`, `auth`, `bearer`, `api_key`, `api_key_header`. See the full [API reference](documentation.md) for the parameter list and semantics.
 
 ## Links
 
