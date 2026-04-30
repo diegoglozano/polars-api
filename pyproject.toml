@@ -45,7 +45,7 @@ dev = [
     "pre-commit>=2.20.0",
     "tox-uv>=1.11.3",
     "deptry>=0.20.0",
-    "mypy>=0.991",
+    "ty>=0.0.33",
     "pytest-cov>=4.0.0",
     "ruff>=0.6.9",
     "mkdocs>=1.4.2",
@@ -60,15 +60,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = { find = {} }
 
-[tool.mypy]
-files = ["polars_api"]
-disallow_untyped_defs = true
-disallow_any_unimported = true
-no_implicit_optional = true
-check_untyped_defs = true
-warn_return_any = true
-warn_unused_ignores = true
-show_error_codes = true
+[tool.ty.src]
+include = ["polars_api"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
