@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, Optional
 
 import httpx
-import nest_asyncio  # type: ignore[import-untyped]
+import nest_asyncio
 import polars as pl
 
 
