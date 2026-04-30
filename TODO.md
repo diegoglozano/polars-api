@@ -2,53 +2,15 @@
 
 A running list of features to consider for `polars-api`. Ordered roughly by value vs. effort.
 
-## Response metadata (incl. per-row timing)
+## ✅ Done
 
-Today, `get`/`post` return only the response body, and any non-2xx silently becomes `None` (`polars_api/api.py:30`, `polars_api/api.py:42`). Add an opt-in `with_metadata=True` (or similar) that returns a struct per row:
-
-```python
-{
-    "body":       Utf8,
-    "status":     Int32,
-    "elapsed_ms": Float64,
-    "error":      Utf8,   # null on success, message on failure
-}
-```
-
-Generalizes the original "return time taken per row" idea and also fixes the silent-failure footgun.
-
-## Request headers (and optional response headers)
-
-- Add a `headers=` parameter accepting a Polars expression that resolves to a struct, so headers can be built per row (auth tokens, `Content-Type`, tenant IDs, etc.).
-- When `with_metadata=True`, optionally include response headers (useful for `X-RateLimit-*`, `Link` pagination, `ETag`).
-
-Per-row headers are required for most real-world APIs; today users have no way to send them.
-
-## Retries with backoff
-
-Add `retries: int = 0` and `backoff: float = 0.0` parameters. Retry on:
-
-- Connection errors / timeouts.
-- 5xx responses.
-- Optionally 429 (respect `Retry-After` if present).
-
-Critical for long batch enrichment jobs against flaky upstreams.
-
-## Concurrency cap for async
-
-`_arequest_many` (`polars_api/api.py:53`) currently fires every row through `asyncio.gather` at once, which DoS's small APIs and trips rate limits. Add `max_concurrency: int | None = None` implemented with an `asyncio.Semaphore`.
-
-## More HTTP verbs
-
-Add `put`, `patch`, `delete`, `head`. `_sync_call`/`_async_call` already take `method` as a string, so this is mostly thin wrappers + tests.
-
-## Auth helpers
-
-Sugar over manual `Authorization` headers:
-
-- `auth=("user", "pass")` — basic auth.
-- `bearer=pl.col("token")` — per-row bearer tokens.
-- `api_key=...` with configurable header name.
+- Response metadata struct (`with_metadata=True` → `{body, status, elapsed_ms, error}`).
+- Per-row request `headers=` parameter.
+- Retries with backoff (connection errors / timeouts / 5xx / 429 with `Retry-After`).
+- `max_concurrency` cap for the async path via `asyncio.Semaphore`.
+- More verbs: `put` / `patch` / `delete` / `head` (and async siblings).
+- Auth helpers: `auth=("user", "pass")`, `bearer=...`, `api_key=...` with `api_key_header=...`.
+- Structured error handling: `on_error="null" | "raise" | "return"`.
 
 ## Shared client / connection pooling
 
