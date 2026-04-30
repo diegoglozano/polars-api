@@ -118,3 +118,84 @@ def test_apost_sends_json_body(monkeypatch: pytest.MonkeyPatch) -> None:
         {"title": "t", "n": 1},
         {"title": "t", "n": 2},
     ]
+
+
+def test_post_failure_returns_null(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_sync(monkeypatch, lambda req: httpx.Response(500, text="boom"))
+
+    df = pl.DataFrame({"url": ["http://x/a"]}).with_columns(
+        pl.struct(title=pl.lit("hi")).alias("body"),
+    )
+    out = df.with_columns(pl.col("url").api.post(body=pl.col("body")).alias("res"))
+
+    assert out["res"].to_list() == [None]
+
+
+def test_apost_failure_returns_null(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_async(monkeypatch, lambda req: httpx.Response(503, text="down"))
+
+    df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]}).with_columns(
+        pl.struct(title=pl.lit("hi")).alias("body"),
+    )
+    out = df.with_columns(pl.col("url").api.apost(body=pl.col("body")).alias("res"))
+
+    assert out["res"].to_list() == [None, None]
+
+
+def test_get_forwards_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[Any] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.extensions.get("timeout"))
+        return httpx.Response(200, text="ok")
+
+    _patch_sync(monkeypatch, handler)
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    df.with_columns(pl.col("url").api.get(timeout=2.5).alias("res"))
+
+    assert seen and seen[0] == {"connect": 2.5, "read": 2.5, "write": 2.5, "pool": 2.5}
+
+
+def test_aget_forwards_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[Any] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.extensions.get("timeout"))
+        return httpx.Response(200, text="ok")
+
+    _patch_async(monkeypatch, handler)
+
+    df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]})
+    df.with_columns(pl.col("url").api.aget(timeout=1.0).alias("res"))
+
+    assert seen and all(t == {"connect": 1.0, "read": 1.0, "write": 1.0, "pool": 1.0} for t in seen)
+
+
+def test_aget_preserves_row_order_with_mixed_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/b":
+            return httpx.Response(500, text="boom")
+        return httpx.Response(200, text=f"ok:{req.url.path}")
+
+    _patch_async(monkeypatch, handler)
+
+    df = pl.DataFrame({"url": ["http://x/a", "http://x/b", "http://x/c"]})
+    out = df.with_columns(pl.col("url").api.aget().alias("res"))
+
+    assert out["res"].to_list() == ["ok:/a", None, "ok:/c"]
+
+
+def test_get_propagates_transport_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Pins current behavior: transport errors are NOT caught and propagate out
+    # of the polars expression. The is_success check only handles HTTP error
+    # responses. If the contract is changed so transport errors return null,
+    # update this test.
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    _patch_sync(monkeypatch, handler)
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    with pytest.raises(Exception):
+        df.with_columns(pl.col("url").api.get().alias("res"))
