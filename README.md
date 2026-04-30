@@ -138,20 +138,69 @@ pl.col("url").api.apost(body=pl.col("body"), timeout=10.0)
 
 All methods live under the `.api` namespace on any Polars expression that resolves to a URL string.
 
-| Method  | HTTP verb | Mode  | Signature                                                                        |
-| ------- | --------- | ----- | -------------------------------------------------------------------------------- |
-| `get`   | GET       | sync  | `get(params: pl.Expr \| None = None, timeout: float \| None = None) -> pl.Expr`  |
-| `aget`  | GET       | async | `aget(params: pl.Expr \| None = None, timeout: float \| None = None) -> pl.Expr` |
-| `post`  | POST      | sync  | `post(params=None, body: pl.Expr \| None = None, timeout=None) -> pl.Expr`       |
-| `apost` | POST      | async | `apost(params=None, body: pl.Expr \| None = None, timeout=None) -> pl.Expr`      |
+| Method               | HTTP verb | Mode         |
+| -------------------- | --------- | ------------ |
+| `get` / `aget`       | GET       | sync / async |
+| `post` / `apost`     | POST      | sync / async |
+| `put` / `aput`       | PUT       | sync / async |
+| `patch` / `apatch`   | PATCH     | sync / async |
+| `delete` / `adelete` | DELETE    | sync / async |
+| `head` / `ahead`     | HEAD      | sync / async |
 
-Arguments:
+Arguments (all keyword-only after the positional `params` / `body`):
 
-- **`params`** — Polars expression that yields a struct of query-string parameters per row. Use `pl.struct(key=...)`.
-- **`body`** _(POST only)_ — Polars expression that yields a struct serialized as a JSON body per row.
-- **`timeout`** — request timeout in seconds (passed to `httpx`).
+- **`params`** — Polars expression yielding a struct of query-string parameters per row.
+- **`body`** _(POST/PUT/PATCH only)_ — Polars expression yielding a struct serialized as a JSON body per row.
+- **`data`** — Polars expression yielding a struct serialized as `application/x-www-form-urlencoded`.
+- **`headers`** — Polars expression yielding a struct of headers per row (e.g. tenant IDs, custom auth).
+- **`client`** — preconfigured `httpx.Client` / `httpx.AsyncClient` to enable connection reuse, HTTP/2, `base_url`, cookies, and custom transports.
+- **`timeout`** — request timeout in seconds.
+- **`retries`** _(int, default 0)_ — retry on connection errors, timeouts, 5xx, and 429.
+- **`backoff`** _(float, default 0.0)_ — exponential backoff base (seconds). 429s respect `Retry-After` if present.
+- **`max_concurrency`** _(async only)_ — cap on in-flight requests via `asyncio.Semaphore`.
+- **`cache`** _(bool, default False)_ — memoize identical `(method, url, params, body, data, headers)` tuples within a batch.
+- **`with_metadata`** _(bool, default False)_ — return a struct `{body, status, elapsed_ms, error}` per row instead of just the body.
+- **`with_response_headers`** _(bool, default False)_ — when `with_metadata=True`, also include `response_headers: List[Struct{name, value}]` on the struct.
+- **`on_error`** _("null" | "raise" | "return")_ — when `with_metadata=False`, what to do on non-2xx / network errors.
+- **`on_request`**, **`on_response`** — callables that receive the `httpx.Request` / `httpx.Response`. Useful for logging, metrics, and tracing.
+- **`auth=("user", "pass")`** — basic auth.
+- **`bearer=pl.col("token")`** — per-row bearer token (also accepts a literal string).
+- **`api_key=...`**, **`api_key_header="X-API-Key"`** — shorthand for an API-key header.
 
-Each method returns a `pl.Expr` of `Utf8` (the response body as text). Use `.str.json_decode()` to parse JSON responses into a struct column you can `unnest`.
+By default, each method returns a `pl.Expr` of `Utf8`. With `with_metadata=True`, it returns a struct column with the schema:
+
+```python
+{"body": Utf8, "status": Int64, "elapsed_ms": Float64, "error": Utf8}
+```
+
+Use `.str.json_decode()` to parse JSON responses.
+
+### Examples
+
+```python
+# Per-row bearer auth + retries + concurrency cap
+pl.col("url").api.aget(
+    bearer=pl.col("token"),
+    retries=3,
+    backoff=0.5,
+    max_concurrency=10,
+)
+
+# Inspect status, timing, errors and response headers
+pl.col("url").api.get(with_metadata=True, with_response_headers=True)
+
+# Bring your own client (HTTP/2, keep-alive, base_url, etc.)
+client = httpx.AsyncClient(http2=True, base_url="https://api.example.com")
+pl.col("path").api.aget(client=client)
+
+# Skip duplicate URLs within a batch (e.g. after a join/explode)
+pl.col("url").api.aget(cache=True)
+
+# Follow Link: rel="next" pagination
+df.with_columns(
+    pl.col("url").api.paginate(max_pages=20).alias("pages")
+).explode("pages")
+```
 
 ## Tips and patterns
 
