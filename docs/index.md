@@ -91,12 +91,12 @@ pl.col("url").api.apost(body=pl.col("body"))  # concurrent POST
 
 ## Methods
 
-| Method   | HTTP verb | Mode  |
-| -------- | --------- | ----- |
-| `get`    | GET       | sync  |
-| `aget`   | GET       | async |
-| `post`   | POST      | sync  |
-| `apost`  | POST      | async |
+| Method  | HTTP verb | Mode  |
+| ------- | --------- | ----- |
+| `get`   | GET       | sync  |
+| `aget`  | GET       | async |
+| `post`  | POST      | sync  |
+| `apost` | POST      | async |
 
 All methods accept optional `params` (struct expression for query string), `timeout` (seconds), and POST methods additionally accept `body` (struct expression serialized as JSON). Each returns a `Utf8` expression with the response body — pipe it through `.str.json_decode()` to parse JSON.
 

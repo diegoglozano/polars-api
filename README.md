@@ -138,17 +138,17 @@ pl.col("url").api.apost(body=pl.col("body"), timeout=10.0)
 
 All methods live under the `.api` namespace on any Polars expression that resolves to a URL string.
 
-| Method   | HTTP verb | Mode  | Signature                                                                              |
-| -------- | --------- | ----- | -------------------------------------------------------------------------------------- |
-| `get`    | GET       | sync  | `get(params: pl.Expr \| None = None, timeout: float \| None = None) -> pl.Expr`        |
-| `aget`   | GET       | async | `aget(params: pl.Expr \| None = None, timeout: float \| None = None) -> pl.Expr`       |
-| `post`   | POST      | sync  | `post(params=None, body: pl.Expr \| None = None, timeout=None) -> pl.Expr`             |
-| `apost`  | POST      | async | `apost(params=None, body: pl.Expr \| None = None, timeout=None) -> pl.Expr`            |
+| Method  | HTTP verb | Mode  | Signature                                                                        |
+| ------- | --------- | ----- | -------------------------------------------------------------------------------- |
+| `get`   | GET       | sync  | `get(params: pl.Expr \| None = None, timeout: float \| None = None) -> pl.Expr`  |
+| `aget`  | GET       | async | `aget(params: pl.Expr \| None = None, timeout: float \| None = None) -> pl.Expr` |
+| `post`  | POST      | sync  | `post(params=None, body: pl.Expr \| None = None, timeout=None) -> pl.Expr`       |
+| `apost` | POST      | async | `apost(params=None, body: pl.Expr \| None = None, timeout=None) -> pl.Expr`      |
 
 Arguments:
 
 - **`params`** — Polars expression that yields a struct of query-string parameters per row. Use `pl.struct(key=...)`.
-- **`body`** *(POST only)* — Polars expression that yields a struct serialized as a JSON body per row.
+- **`body`** _(POST only)_ — Polars expression that yields a struct serialized as a JSON body per row.
 - **`timeout`** — request timeout in seconds (passed to `httpx`).
 
 Each method returns a `pl.Expr` of `Utf8` (the response body as text). Use `.str.json_decode()` to parse JSON responses into a struct column you can `unnest`.
