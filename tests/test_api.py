@@ -1,13 +1,16 @@
 import json
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Union
+from urllib.parse import urlparse
 
 import httpx
 import polars as pl
 import pytest
+from multidict import CIMultiDict, CIMultiDictProxy
 
 import polars_api  # noqa: F401  registers the `api` namespace
 
 
+# ---- sync mocking (httpx) ----
 def _patch_sync(monkeypatch: pytest.MonkeyPatch, handler: Callable[[httpx.Request], httpx.Response]) -> None:
     transport = httpx.MockTransport(handler)
     real = httpx.Client
@@ -19,14 +22,68 @@ def _patch_sync(monkeypatch: pytest.MonkeyPatch, handler: Callable[[httpx.Reques
     monkeypatch.setattr("polars_api.api.httpx.Client", factory)
 
 
-def _patch_async(monkeypatch: pytest.MonkeyPatch, handler: Callable[[httpx.Request], httpx.Response]) -> None:
-    transport = httpx.MockTransport(handler)
-    real = httpx.AsyncClient
+# ---- async mocking (aiohttp) ----
+#
+# We don't pull in aioresponses; the polars-api async path only needs
+# ``session.request(method, url, **kwargs)`` returning an async-context-manager
+# yielding an object with ``.status``, ``.headers``, and an awaitable
+# ``.text()``. A ~50-line fake covers every test below.
+class _FakeAioResponse:
+    def __init__(
+        self,
+        status: int = 200,
+        text: str = "",
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
+        self.status = status
+        self._text = text
+        self.headers = CIMultiDictProxy(CIMultiDict(headers or {}))
 
-    def factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
-        return real(*args, transport=transport, **kwargs)
+    async def text(self) -> str:
+        return self._text
 
-    monkeypatch.setattr("polars_api.api.httpx.AsyncClient", factory)
+
+class _FakeAioRequestCtx:
+    def __init__(self, response_or_exc: Union[_FakeAioResponse, BaseException]) -> None:
+        self._payload = response_or_exc
+
+    async def __aenter__(self) -> _FakeAioResponse:
+        if isinstance(self._payload, BaseException):
+            raise self._payload
+        return self._payload
+
+    async def __aexit__(self, *_: Any) -> None:
+        return None
+
+
+# Handler signature: (method, url, kwargs) -> _FakeAioResponse | BaseException.
+# ``kwargs`` is the dict our code passes to ``session.request`` (params, json,
+# data, headers, timeout) so handlers can inspect what was sent.
+AioHandler = Callable[[str, str, dict[str, Any]], Union[_FakeAioResponse, BaseException]]
+
+
+class _FakeAioSession:
+    def __init__(self, handler: AioHandler, **_: Any) -> None:
+        self._handler = handler
+        self.requests: list[tuple[str, str, dict[str, Any]]] = []
+
+    def request(self, method: str, url: str, **kwargs: Any) -> _FakeAioRequestCtx:
+        self.requests.append((method, url, kwargs))
+        return _FakeAioRequestCtx(self._handler(method, url, kwargs))
+
+    async def close(self) -> None:
+        return None
+
+
+def _patch_async(monkeypatch: pytest.MonkeyPatch, handler: AioHandler) -> None:
+    def factory(*_: Any, **kwargs: Any) -> _FakeAioSession:
+        return _FakeAioSession(handler, **kwargs)
+
+    monkeypatch.setattr("polars_api.api.aiohttp.ClientSession", factory)
+
+
+def _path(url: str) -> str:
+    return urlparse(url).path
 
 
 def test_get_returns_response_text(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,7 +140,7 @@ def test_post_sends_json_body(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_aget_returns_response_text(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_async(monkeypatch, lambda req: httpx.Response(200, text=f"ok:{req.url.path}"))
+    _patch_async(monkeypatch, lambda m, url, kw: _FakeAioResponse(200, f"ok:{_path(url)}"))
 
     df = pl.DataFrame({"url": ["http://x/a", "http://x/b", "http://x/c"]})
     out = df.with_columns(pl.col("url").api.aget().alias("res"))
@@ -92,7 +149,7 @@ def test_aget_returns_response_text(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_aget_failure_returns_null(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_async(monkeypatch, lambda req: httpx.Response(404, text="nope"))
+    _patch_async(monkeypatch, lambda m, url, kw: _FakeAioResponse(404, "nope"))
 
     df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]})
     out = df.with_columns(pl.col("url").api.aget().alias("res"))
@@ -103,9 +160,9 @@ def test_aget_failure_returns_null(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_apost_sends_json_body(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[dict[str, Any]] = []
 
-    def handler(req: httpx.Request) -> httpx.Response:
-        seen.append(json.loads(req.content))
-        return httpx.Response(200, text="ok")
+    def handler(method: str, url: str, kwargs: dict[str, Any]) -> _FakeAioResponse:
+        seen.append(kwargs.get("json"))
+        return _FakeAioResponse(200, "ok")
 
     _patch_async(monkeypatch, handler)
 
@@ -147,7 +204,7 @@ def test_with_metadata_sync_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_with_metadata_async_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_async(monkeypatch, lambda req: httpx.Response(200, text="hi"))
+    _patch_async(monkeypatch, lambda m, url, kw: _FakeAioResponse(200, "hi"))
 
     df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]})
     out = df.with_columns(pl.col("url").api.aget(with_metadata=True).alias("res"))
@@ -221,13 +278,14 @@ def test_retries_429_respects_retry_after(monkeypatch: pytest.MonkeyPatch) -> No
 def test_max_concurrency_caps_in_flight(monkeypatch: pytest.MonkeyPatch) -> None:
     state = {"in_flight": 0, "max_seen": 0}
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(method: str, url: str, kwargs: dict[str, Any]) -> _FakeAioResponse:
         state["in_flight"] += 1
         state["max_seen"] = max(state["max_seen"], state["in_flight"])
-        # Note: MockTransport runs synchronously; the in-flight counter still
-        # reflects the semaphore behaviour because each task acquires/releases.
+        # The fake session runs handlers synchronously, so in-flight is bumped
+        # and dropped within a single semaphore-protected section. We're only
+        # asserting the cap is respected, not the exact ceiling.
         state["in_flight"] -= 1
-        return httpx.Response(200, text="ok")
+        return _FakeAioResponse(200, "ok")
 
     _patch_async(monkeypatch, handler)
 
@@ -261,9 +319,9 @@ def test_put_patch_delete_head(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_async_verbs(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[str] = []
 
-    def handler(req: httpx.Request) -> httpx.Response:
-        seen.append(req.method)
-        return httpx.Response(200, text="ok")
+    def handler(method: str, url: str, kwargs: dict[str, Any]) -> _FakeAioResponse:
+        seen.append(method)
+        return _FakeAioResponse(200, "ok")
 
     _patch_async(monkeypatch, handler)
 
@@ -371,13 +429,13 @@ def test_custom_sync_client_is_used() -> None:
 
 
 def test_custom_async_client_is_used() -> None:
-    transport = httpx.MockTransport(lambda req: httpx.Response(200, text=f"hi:{req.url.path}"))
-    client = httpx.AsyncClient(transport=transport)
+    session = _FakeAioSession(lambda m, url, kw: _FakeAioResponse(200, f"hi:{_path(url)}"))
 
     df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]})
-    out = df.with_columns(pl.col("url").api.aget(client=client).alias("r"))
+    out = df.with_columns(pl.col("url").api.aget(client=session).alias("r"))
 
     assert out["r"].to_list() == ["hi:/a", "hi:/b"]
+    assert [r[0] for r in session.requests] == ["GET", "GET"]
 
 
 def test_on_request_and_on_response_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -418,9 +476,9 @@ def test_in_batch_cache_dedupes_sync(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_in_batch_cache_dedupes_async(monkeypatch: pytest.MonkeyPatch) -> None:
     state = {"calls": 0}
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(method: str, url: str, kwargs: dict[str, Any]) -> _FakeAioResponse:
         state["calls"] += 1
-        return httpx.Response(200, text=req.url.path)
+        return _FakeAioResponse(200, _path(url))
 
     _patch_async(monkeypatch, handler)
 
