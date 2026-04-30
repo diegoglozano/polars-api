@@ -4,6 +4,7 @@ Spins up a local aiohttp server, then issues N concurrent GETs against it
 with each client. Reports wall-clock time and requests/sec. Run multiple
 times and average to smooth out noise.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -133,9 +134,7 @@ def bench_polars_api_shared_client(n: int, concurrency: int) -> float:
 
     session = asyncio.run(_build())
     start = time.monotonic()
-    df.with_columns(
-        pl.col("url").api.aget(client=session, max_concurrency=concurrency).alias("body")
-    )
+    df.with_columns(pl.col("url").api.aget(client=session, max_concurrency=concurrency).alias("body"))
     elapsed = time.monotonic() - start
     asyncio.run(session.close())
     return elapsed
@@ -149,8 +148,10 @@ def run(label: str, fn, n: int, concurrency: int, repeats: int) -> tuple[float, 
         times.append(t)
     median = statistics.median(times)
     rps = n / median if median > 0 else float("inf")
-    print(f"  {label:<30} median={median*1000:7.1f} ms   rps={rps:8.1f}   "
-          f"(min={min(times)*1000:.1f}, max={max(times)*1000:.1f})")
+    print(
+        f"  {label:<30} median={median * 1000:7.1f} ms   rps={rps:8.1f}   "
+        f"(min={min(times) * 1000:.1f}, max={max(times) * 1000:.1f})"
+    )
     return median, rps
 
 
