@@ -2,6 +2,7 @@ import asyncio
 import base64
 import re
 import time
+import warnings
 from typing import Any, Callable, Optional, Union
 
 import aiohttp
@@ -133,23 +134,6 @@ def _parse_link_next(link_header: Optional[str]) -> Optional[str]:
             match = re.match(r"\s*<([^>]+)>", part)
             if match:
                 return match.group(1)
-    return None
-
-
-def _resolve_output(
-    result: dict[str, Any],
-    *,
-    with_metadata: bool,
-    on_error: OnError,
-) -> Any:
-    if with_metadata:
-        return result
-    if result["error"] is None:
-        return result["body"]
-    if on_error == "raise":
-        raise RuntimeError(result["error"])
-    if on_error == "return":
-        return result["body"]
     return None
 
 
@@ -601,6 +585,7 @@ class Api:
         if with_metadata:
             return pl.Series(results, dtype=_metadata_dtype(with_response_headers))
         out: list[Optional[str]] = []
+        silent_errors: list[str] = []
         for r in results:
             if r["error"] is None:
                 out.append(_coerce_body(r["body"]))
@@ -610,6 +595,15 @@ class Api:
                 out.append(_coerce_body(r["body"]))
             else:
                 out.append(None)
+                silent_errors.append(r["error"])
+        if silent_errors:
+            warnings.warn(
+                f"polars-api: {len(silent_errors)}/{len(results)} request(s) failed and "
+                f"were replaced with null (first error: {silent_errors[0]}). "
+                "Pass with_metadata=True to inspect per-row errors, or "
+                "on_error='raise'/'return' to change handling.",
+                stacklevel=2,
+            )
         return pl.Series(out, dtype=pl.Utf8)
 
     @staticmethod

@@ -1,4 +1,5 @@
 import json
+import warnings
 from typing import Any, Callable, Optional, Union
 from urllib.parse import urlparse
 
@@ -415,6 +416,55 @@ def test_connection_error_returns_null(monkeypatch: pytest.MonkeyPatch) -> None:
     assert row["body"] is None
     assert row["error"] is not None
     assert "ConnectError" in row["error"]
+
+
+def test_silent_null_failure_warns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A column of nulls from unreachable URLs should not be silent — emit a warning."""
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom")
+
+    _patch_sync(monkeypatch, handler)
+
+    df = pl.DataFrame({"url": ["http://nope.invalid/a", "http://nope.invalid/b"]})
+    with pytest.warns(UserWarning, match=r"2/2 request\(s\) failed"):
+        out = df.with_columns(pl.col("url").api.get().alias("r"))
+
+    assert out["r"].to_list() == [None, None]
+
+
+def test_silent_null_failure_warns_async(monkeypatch: pytest.MonkeyPatch) -> None:
+    import aiohttp
+
+    def handler(method: str, url: str, kwargs: dict[str, Any]) -> BaseException:
+        return aiohttp.ClientConnectionError(f"cannot connect to {url}")
+
+    _patch_async(monkeypatch, handler)
+
+    df = pl.DataFrame({"url": ["http://nope.invalid/a"]})
+    with pytest.warns(UserWarning, match=r"1/1 request\(s\) failed"):
+        out = df.with_columns(pl.col("url").api.aget().alias("r"))
+
+    assert out["r"].to_list() == [None]
+
+
+def test_no_warning_when_with_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    """with_metadata=True surfaces errors per row, so no warning is needed."""
+    _patch_sync(monkeypatch, lambda req: httpx.Response(500, text="boom"))
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        df.with_columns(pl.col("url").api.get(with_metadata=True).alias("r"))
+
+
+def test_no_warning_when_on_error_return(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_sync(monkeypatch, lambda req: httpx.Response(404, text="missing"))
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        df.with_columns(pl.col("url").api.get(on_error="return").alias("r"))
 
 
 def test_custom_sync_client_is_used() -> None:
