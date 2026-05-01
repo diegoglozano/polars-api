@@ -422,7 +422,7 @@ def test_silent_null_failure_warns(monkeypatch: pytest.MonkeyPatch) -> None:
     """A column of nulls from unreachable URLs should not be silent — emit a warning."""
 
     def handler(req: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("name resolution failed")
+        raise httpx.ConnectError("boom")
 
     _patch_sync(monkeypatch, handler)
 
