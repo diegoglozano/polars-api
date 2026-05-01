@@ -17,7 +17,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/prek
-          key: prek-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: prek-${{ hashFiles('prek.toml') }}
 
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
