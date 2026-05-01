@@ -43,7 +43,7 @@ Documentation = "https://diegoglozano.github.io/polars-api/"
 [dependency-groups]
 dev = [
     "pytest>=7.2.0",
-    "pre-commit>=2.20.0",
+    "prek>=0.3.11",
     "tox-uv>=1.11.3",
     "deptry>=0.20.0",
     "ty>=0.0.33",
