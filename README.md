@@ -204,6 +204,52 @@ df.with_columns(
 ).explode("pages")
 ```
 
+## Benchmarks
+
+`benchmarks/bench.py` spins up a local `aiohttp` echo server on `127.0.0.1` and
+issues N concurrent GETs against it with each client. Local-loopback isolates
+client-side overhead — it is **not** a model of real network latency, but it is
+useful for comparing the per-request cost of each path.
+
+### Reproducing
+
+```sh
+# default scenarios: 100/50, 500/100, 1000/100, 2000/200, repeats=5
+make bench
+
+# or with custom scenarios (N/concurrency pairs) and repeats
+uv run python benchmarks/bench.py --scenarios 100/50,1000/100 --repeats 7
+```
+
+The script writes `benchmarks/results.json` (raw timings + environment) and
+`benchmarks/results.md` (Markdown table). The committed files are the most
+recent run on the reference environment described below.
+
+### Latest results
+
+Median of 5 runs, on Linux 6.18 / x86_64 / 4 cores, Python 3.11.15, polars
+1.19.0, httpx 0.28.1, aiohttp 3.13.5. Higher rps is better.
+
+| Scenario (N / concurrency) | polars-api default | polars-api shared client | bare httpx (default) | bare httpx (tuned) | bare aiohttp |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 100 / 50 | **3,471** rps | **4,122** rps | 538 rps | 235 rps | 3,041 rps |
+| 500 / 100 | **3,728** rps | **4,284** rps | 401 rps | 88 rps | 4,352 rps |
+| 1000 / 100 | **4,012** rps | **3,734** rps | 355 rps | 137 rps | 4,701 rps |
+| 2000 / 200 | **3,980** rps | **3,772** rps | 125 rps | 123 rps | 4,477 rps |
+
+Takeaways:
+
+- The async `aget` / `apost` path runs at roughly the same throughput as bare
+  `aiohttp`, with a small overhead for the Polars expression plumbing.
+- It is **~10–35× faster than `httpx`** at the concurrencies tested, which is
+  why the async path was migrated to `aiohttp`.
+- Bringing your own `aiohttp.ClientSession` via `client=` shaves a little more
+  off small batches (no per-call session setup) and is recommended for
+  long-running pipelines.
+
+These numbers measure client overhead, not API latency. With a real remote
+endpoint, network RTT will dominate and the gap between clients shrinks.
+
 ## Tips and patterns
 
 - **Decode JSON immediately**: chain `.str.json_decode()` and then `.struct.unnest()` (or `pl.col("response").struct.field("…")`) to flatten the result.
