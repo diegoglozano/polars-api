@@ -22,8 +22,11 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
 
+      - name: Install just
+        uses: extractions/setup-just@v2
+
       - name: Run checks
-        run: make check
+        run: just check
 
   tests-and-type-check:
     runs-on: ubuntu-latest
