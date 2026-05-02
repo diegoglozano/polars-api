@@ -3,6 +3,10 @@ title: polars-api — REST API calls from Polars DataFrames
 description: Call REST APIs from a Polars DataFrame, one row at a time, using native Polars expressions. Supports sync and async GET/POST with per-row URLs, params, and bodies.
 ---
 
+<p align="center">
+  <img src="assets/logo.svg" alt="polars-api" width="180" />
+</p>
+
 # polars-api
 
 [![PyPI version](https://img.shields.io/pypi/v/polars-api.svg)](https://pypi.org/project/polars-api/)

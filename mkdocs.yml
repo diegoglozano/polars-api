@@ -25,6 +25,8 @@ plugins:
             heading_level: 3
 theme:
   name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
   feature:
     tabs: true
   palette:

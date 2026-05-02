@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/diegoglozano/polars-api/main/docs/assets/logo.svg" alt="polars-api" width="180" />
+</p>
+
 # polars-api
 
 [![PyPI version](https://img.shields.io/pypi/v/polars-api.svg)](https://pypi.org/project/polars-api/)
