@@ -222,8 +222,9 @@ uv run python benchmarks/bench.py --scenarios 100/50,1000/100 --repeats 7
 ```
 
 The script writes `benchmarks/results.json` (raw timings + environment) and
-`benchmarks/results.md` (Markdown table). The committed files are the most
-recent run on the reference environment described below.
+`benchmarks/results.md` (Markdown table) for inspection or sharing. Both files
+are gitignored — re-run locally to refresh. The numbers below are a reference
+run on the environment described.
 
 ### Latest results
 
@@ -231,11 +232,11 @@ Median of 5 runs, on Linux 6.18 / x86_64 / 4 cores, Python 3.11.15, polars
 1.19.0, httpx 0.28.1, aiohttp 3.13.5. Higher rps is better.
 
 | Scenario (N / concurrency) | polars-api default | polars-api shared client | bare httpx (default) | bare httpx (tuned) | bare aiohttp |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 100 / 50 | **3,471** rps | **4,122** rps | 538 rps | 235 rps | 3,041 rps |
-| 500 / 100 | **3,728** rps | **4,284** rps | 401 rps | 88 rps | 4,352 rps |
-| 1000 / 100 | **4,012** rps | **3,734** rps | 355 rps | 137 rps | 4,701 rps |
-| 2000 / 200 | **3,980** rps | **3,772** rps | 125 rps | 123 rps | 4,477 rps |
+| -------------------------- | -----------------: | -----------------------: | -------------------: | -----------------: | -----------: |
+| 100 / 50                   |      **3,471** rps |            **4,122** rps |              538 rps |            235 rps |    3,041 rps |
+| 500 / 100                  |      **3,728** rps |            **4,284** rps |              401 rps |             88 rps |    4,352 rps |
+| 1000 / 100                 |      **4,012** rps |            **3,734** rps |              355 rps |            137 rps |    4,701 rps |
+| 2000 / 200                 |      **3,980** rps |            **3,772** rps |              125 rps |            123 rps |    4,477 rps |
 
 Takeaways:
 

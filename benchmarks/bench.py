@@ -167,7 +167,8 @@ BENCHES: list[tuple[str, Callable]] = [
     ("polars-api (shared client)", bench_polars_api_shared_client),
     ("bare httpx (default limits)", bench_httpx_async),
     ("bare httpx (tuned limits)", bench_httpx_async_tuned),
-    ("bare aiohttp", bench_aiohttp),]
+    ("bare aiohttp", bench_aiohttp),
+]
 
 
 def _run_one(fn: Callable, base: str, n: int, concurrency: int) -> float:
@@ -187,19 +188,17 @@ def run_scenario(base: str, n: int, concurrency: int, repeats: int) -> list[dict
             f"  {label:<30} median={median * 1000:7.1f} ms   rps={rps:8.1f}   "
             f"(min={min(times) * 1000:.1f}, max={max(times) * 1000:.1f})"
         )
-        rows.append(
-            {
-                "label": label,
-                "n": n,
-                "concurrency": concurrency,
-                "repeats": repeats,
-                "times_s": times,
-                "median_s": median,
-                "min_s": min(times),
-                "max_s": max(times),
-                "rps_median": rps,
-            }
-        )
+        rows.append({
+            "label": label,
+            "n": n,
+            "concurrency": concurrency,
+            "repeats": repeats,
+            "times_s": times,
+            "median_s": median,
+            "min_s": min(times),
+            "max_s": max(times),
+            "rps_median": rps,
+        })
     return rows
 
 
