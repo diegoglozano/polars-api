@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="polars-api logo">
+  <title>polars-api</title>
+
+  <!-- Rounded-square backdrop, Polars-inspired deep navy -->
+  <rect width="256" height="256" rx="56" fill="#0E1E29"/>
+
+  <!-- Left curly brace: API / JSON glyph -->
+  <path d="M76 64
+           Q52 64 52 88
+           L52 116
+           Q52 128 36 128
+           Q52 128 52 140
+           L52 168
+           Q52 192 76 192"
+        fill="none"
+        stroke="#FFB088"
+        stroke-width="10"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+  <!-- Right curly brace: API / JSON glyph -->
+  <path d="M180 64
+           Q204 64 204 88
+           L204 116
+           Q204 128 220 128
+           Q204 128 204 140
+           L204 168
+           Q204 192 180 192"
+        fill="none"
+        stroke="#FFB088"
+        stroke-width="10"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+  <!-- Polars signature: two overlapping "bear" circles -->
+  <circle cx="112" cy="118" r="40" fill="#F5E6D8"/>
+  <circle cx="156" cy="142" r="26" fill="#F88B3B"/>
+
+  <!-- Request arrow: subtle nod to per-row HTTP calls -->
+  <path d="M132 196 L168 196"
+        stroke="#22D3EE"
+        stroke-width="6"
+        stroke-linecap="round"/>
+  <path d="M160 188 L172 196 L160 204"
+        fill="none"
+        stroke="#22D3EE"
+        stroke-width="6"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+</svg>
