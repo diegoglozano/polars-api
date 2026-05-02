@@ -38,6 +38,11 @@ publish: ## Publish a release to PyPI.
 .PHONY: build-and-publish
 build-and-publish: build publish ## Build and publish.
 
+.PHONY: bench
+bench: ## Run the throughput benchmarks (writes benchmarks/results.{json,md})
+	@echo "🚀 Running benchmarks"
+	@uv run python benchmarks/bench.py
+
 .PHONY: docs-test
 docs-test: ## Test if documentation can be built without warnings or errors
 	@uv run mkdocs build -s
