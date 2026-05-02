@@ -5,104 +5,72 @@
       <stop offset="0%" stop-color="#0E7FC1"/>
       <stop offset="100%" stop-color="#172554"/>
     </linearGradient>
-    <linearGradient id="snow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.65"/>
-    </linearGradient>
-    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.20"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.05"/>
-    </linearGradient>
   </defs>
 
   <rect width="256" height="256" rx="48" fill="url(#bg)"/>
 
-  <!-- Background DataFrame rows: rounded pills of varying widths,
-       echoing Polars' rounded-rectangle wordmark. The rows are the
-       "data" the polar bear is sitting on. -->
-  <g>
-    <rect x="40"  y="178" width="56"  height="14" rx="7" fill="url(#bar)"/>
-    <rect x="100" y="178" width="116" height="14" rx="7" fill="url(#bar)"/>
-    <rect x="40"  y="158" width="92"  height="14" rx="7" fill="url(#bar)"/>
-    <rect x="136" y="158" width="80"  height="14" rx="7" fill="url(#bar)"/>
-    <rect x="40"  y="138" width="68"  height="14" rx="7" fill="url(#bar)"/>
-    <rect x="112" y="138" width="104" height="14" rx="7" fill="url(#bar)"/>
-    <rect x="40"  y="118" width="120" height="14" rx="7" fill="url(#bar)"/>
-    <rect x="164" y="118" width="52"  height="14" rx="7" fill="url(#bar)"/>
-  </g>
-
-  <!-- Snow mound -->
-  <path d="M 24 200
-           C 80 200, 92 92, 128 92
-           C 164 92, 176 200, 232 200 Z"
-        fill="url(#snow)"/>
-  <path d="M 24 200
-           C 80 200, 92 92, 128 92
-           C 164 92, 176 200, 232 200"
-        fill="none" stroke="#FFFFFF" stroke-width="4"
-        stroke-linecap="round" stroke-linejoin="round"/>
-
-  <line x1="24" y1="200" x2="232" y2="200"
-        stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
-
-  <!-- Polar bear (the polars mascot) -->
-  <g>
-    <ellipse cx="113" cy="58" rx="9"  ry="11" fill="#FFFFFF" stroke="#172554" stroke-width="1.6"/>
-    <ellipse cx="143" cy="58" rx="9"  ry="11" fill="#FFFFFF" stroke="#172554" stroke-width="1.6"/>
-    <ellipse cx="113" cy="60" rx="4"  ry="5.5" fill="#0E7FC1" opacity="0.55"/>
-    <ellipse cx="143" cy="60" rx="4"  ry="5.5" fill="#0E7FC1" opacity="0.55"/>
-
-    <circle cx="128" cy="80" r="24" fill="#FFFFFF" stroke="#172554" stroke-width="1.6"/>
-
-    <ellipse cx="128" cy="90" rx="11" ry="8" fill="#F1F5FB"/>
-
-    <circle cx="121" cy="76" r="2.6" fill="#172554"/>
-    <circle cx="135" cy="76" r="2.6" fill="#172554"/>
-    <circle cx="121.7" cy="75.3" r="0.9" fill="#FFFFFF"/>
-    <circle cx="135.7" cy="75.3" r="0.9" fill="#FFFFFF"/>
-
-    <ellipse cx="128" cy="86" rx="2.8" ry="2.1" fill="#172554"/>
-    <path d="M 128 89 Q 125 92.5, 122.5 91" fill="none" stroke="#172554" stroke-width="1.3" stroke-linecap="round"/>
-    <path d="M 128 89 Q 131 92.5, 133.5 91" fill="none" stroke="#172554" stroke-width="1.3" stroke-linecap="round"/>
-  </g>
-
-  <!-- API "thought bubble": a JSON brace pair floating above the bear,
-       making the polars-api story explicit. -->
-  <g fill="none" stroke="#FBBF24" stroke-width="3"
-     stroke-linecap="round" stroke-linejoin="round" opacity="0.95">
-    <path d="M 102 22
-             Q 94 22 94 30
-             Q 94 35 88 35
-             Q 94 35 94 40
-             Q 94 48 102 48"/>
-    <path d="M 154 22
-             Q 162 22 162 30
-             Q 162 35 168 35
-             Q 162 35 162 40
-             Q 162 48 154 48"/>
-    <circle cx="118" cy="35" r="1.6" fill="#FBBF24" stroke="none"/>
-    <circle cx="128" cy="35" r="1.6" fill="#FBBF24" stroke="none"/>
-    <circle cx="138" cy="35" r="1.6" fill="#FBBF24" stroke="none"/>
-  </g>
-
-  <!-- Outgoing HTTP requests: arrow-shaped accents flying off to the
-       right, replacing the example's decorative data dots. -->
-  <g fill="#F59E0B">
-    <polygon points="42,187 53,193 42,199"/>
-    <polygon points="64,169 75,175 64,181"/>
-    <polygon points="84,141 95,147 84,153"/>
-    <polygon points="166,141 177,147 166,153"/>
-    <polygon points="186,169 197,175 186,181"/>
-    <polygon points="206,187 217,193 206,199"/>
-  </g>
-
   <!-- Stars -->
   <g fill="#FBBF24" opacity="0.9">
-    <circle cx="42"  cy="44" r="2"/>
-    <circle cx="74"  cy="32" r="1.6"/>
-    <circle cx="182" cy="32" r="1.6"/>
-    <circle cx="214" cy="44" r="2"/>
-    <circle cx="32"  cy="68" r="1.5"/>
-    <circle cx="224" cy="68" r="1.5"/>
+    <circle cx="32"  cy="40"  r="2"/>
+    <circle cx="62"  cy="24"  r="1.6"/>
+    <circle cx="194" cy="24"  r="1.6"/>
+    <circle cx="224" cy="40"  r="2"/>
+    <circle cx="40"  cy="226" r="1.6"/>
+    <circle cx="216" cy="226" r="1.6"/>
+  </g>
+
+  <!-- Left JSON brace { -->
+  <path d="M 72 44
+           Q 50 44 50 64
+           L 50 116
+           Q 50 128 30 128
+           Q 50 128 50 140
+           L 50 192
+           Q 50 212 72 212"
+        fill="none" stroke="#FBBF24" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Right JSON brace } -->
+  <path d="M 184 44
+           Q 206 44 206 64
+           L 206 116
+           Q 206 128 226 128
+           Q 206 128 206 140
+           L 206 192
+           Q 206 212 184 212"
+        fill="none" stroke="#FBBF24" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Polar bear head (the polars reference) -->
+  <g>
+    <!-- Ears -->
+    <ellipse cx="103" cy="100" rx="12" ry="15"
+             fill="#FFFFFF" stroke="#172554" stroke-width="1.8"/>
+    <ellipse cx="153" cy="100" rx="12" ry="15"
+             fill="#FFFFFF" stroke="#172554" stroke-width="1.8"/>
+    <ellipse cx="103" cy="102" rx="5" ry="7.5" fill="#0E7FC1" opacity="0.55"/>
+    <ellipse cx="153" cy="102" rx="5" ry="7.5" fill="#0E7FC1" opacity="0.55"/>
+
+    <!-- Head -->
+    <circle cx="128" cy="130" r="38"
+            fill="#FFFFFF" stroke="#172554" stroke-width="1.8"/>
+
+    <!-- Muzzle -->
+    <ellipse cx="128" cy="146" rx="16" ry="12" fill="#F1F5FB"/>
+
+    <!-- Eyes -->
+    <circle cx="114" cy="122" r="3.6" fill="#172554"/>
+    <circle cx="142" cy="122" r="3.6" fill="#172554"/>
+    <circle cx="114.9" cy="121" r="1.2" fill="#FFFFFF"/>
+    <circle cx="142.9" cy="121" r="1.2" fill="#FFFFFF"/>
+
+    <!-- Nose -->
+    <ellipse cx="128" cy="140" rx="4" ry="3" fill="#172554"/>
+
+    <!-- Mouth -->
+    <path d="M 128 144 Q 123.5 149 119.5 147.5"
+          fill="none" stroke="#172554" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 128 144 Q 132.5 149 136.5 147.5"
+          fill="none" stroke="#172554" stroke-width="1.6" stroke-linecap="round"/>
   </g>
 </svg>
