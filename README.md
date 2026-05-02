@@ -215,7 +215,7 @@ useful for comparing the per-request cost of each path.
 
 ```sh
 # default scenarios: 100/50, 500/100, 1000/100, 2000/200, repeats=5
-make bench
+just bench
 
 # or with custom scenarios (N/concurrency pairs) and repeats
 uv run python benchmarks/bench.py --scenarios 100/50,1000/100 --repeats 7
