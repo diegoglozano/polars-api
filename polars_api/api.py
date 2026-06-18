@@ -1130,8 +1130,9 @@ class Api:
         """Synchronously paginate per row, following Link: rel="next" by default.
 
         Returns a column of List[Utf8] — one list of response bodies per starting
-        URL. Pipe through `.list.eval(pl.element().str.json_decode())` and `.explode(...)`
-        to flatten paginated rows back into the DataFrame.
+        URL. Pipe through `.list.eval(pl.element().str.json_decode(dtype))` and
+        `.explode(...)` to flatten paginated rows back into the DataFrame (the
+        `dtype` schema is required when decoding inside an expression).
 
         Pass `next_url=lambda response: ...` to extract the next URL from a custom
         location (e.g. a JSON field) instead of the Link header.

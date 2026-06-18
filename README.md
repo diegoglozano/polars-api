@@ -19,13 +19,19 @@
 import polars as pl
 import polars_api  # noqa: F401  — registers the `.api` namespace
 
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
 (
     pl.DataFrame({"url": ["https://jsonplaceholder.typicode.com/posts/1"]})
       .with_columns(
-          pl.col("url").api.get().str.json_decode().alias("response")
+          pl.col("url").api.get().str.json_decode(post).alias("response")
       )
 )
 ```
+
+> In an expression, `str.json_decode()` needs an explicit `dtype` (recent Polars
+> made it required). See [Decoding JSON responses](#6-decoding-json-responses)
+> for the schema-free, eager alternative.
 
 - **Repository**: <https://github.com/diegoglozano/polars-api>
 - **Documentation**: <https://diegoglozano.github.io/polars-api/>
@@ -71,20 +77,23 @@ Requires Python 3.9+ and Polars 1.0+.
 import polars as pl
 import polars_api  # noqa: F401
 
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
 df = (
     pl.DataFrame({"id": [1, 2, 3]})
       .with_columns(
           ("https://jsonplaceholder.typicode.com/posts/" + pl.col("id").cast(pl.Utf8)).alias("url")
       )
       .with_columns(
-          pl.col("url").api.get().str.json_decode().alias("response")
+          pl.col("url").api.get().str.json_decode(post).alias("response")
       )
 )
 ```
 
 ### 2. GET with query parameters
 
-Pass any Polars expression that resolves to a struct as `params`:
+Pass any Polars expression that resolves to a struct as `params`. Here the
+endpoint returns a JSON array, so the decode schema is `pl.List(post)`:
 
 ```python
 df = (
@@ -93,7 +102,7 @@ df = (
           pl.struct(userId=pl.Series([1, 2, 3])).alias("params"),
       )
       .with_columns(
-          pl.col("url").api.get(params=pl.col("params")).str.json_decode().alias("response")
+          pl.col("url").api.get(params=pl.col("params")).str.json_decode(pl.List(post)).alias("response")
       )
 )
 ```
@@ -101,6 +110,8 @@ df = (
 ### 3. POST with a JSON body
 
 ```python
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
 df = (
     pl.DataFrame({"url": ["https://jsonplaceholder.typicode.com/posts"] * 3})
       .with_columns(
@@ -111,7 +122,7 @@ df = (
           ).alias("body"),
       )
       .with_columns(
-          pl.col("url").api.post(body=pl.col("body")).str.json_decode().alias("response")
+          pl.col("url").api.post(body=pl.col("body")).str.json_decode(post).alias("response")
       )
 )
 ```
@@ -121,10 +132,12 @@ df = (
 `aget` and `apost` fan out with `aiohttp` and `asyncio.gather`, so requests run concurrently per batch. In benchmarks against a local server, this is roughly an order of magnitude faster than the sync path at high concurrency:
 
 ```python
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
 df = (
     pl.DataFrame({"url": ["https://jsonplaceholder.typicode.com/posts"] * 100})
       .with_columns(
-          pl.col("url").api.aget().str.json_decode().alias("response")
+          pl.col("url").api.aget().str.json_decode(pl.List(post)).alias("response")
       )
 )
 ```
@@ -138,7 +151,41 @@ pl.col("url").api.get(timeout=5.0)
 pl.col("url").api.apost(body=pl.col("body"), timeout=10.0)
 ```
 
-### 6. Global defaults (set options once)
+### 6. Decoding JSON responses
+
+Every verb returns a `Utf8` column of raw response bodies. There are two ways to
+parse it, depending on the context:
+
+**In an expression (works in both `DataFrame` and `LazyFrame`)** — pass an
+explicit `dtype`. Recent versions of Polars made the `dtype` argument of
+`Expr.str.json_decode()` required, because the lazy engine needs to know the
+output schema up front:
+
+```python
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
+df.with_columns(
+    pl.col("response").str.json_decode(post)
+)
+```
+
+If the endpoint returns a JSON array, wrap the element schema in `pl.List(...)`
+(e.g. `pl.List(post)`).
+
+**On a materialized `Series` (eager `DataFrame` only)** — `Series.str.json_decode()`
+can still infer the schema from the data, so you can skip the explicit dtype.
+This is convenient for quick, interactive exploration:
+
+```python
+df = df.with_columns(
+    df["response"].str.json_decode().alias("response")
+)
+```
+
+Inference only works on an already-collected `DataFrame`; inside a `LazyFrame`
+pipeline you must use the expression form with an explicit dtype.
+
+### 7. Global defaults (set options once)
 
 Talking to an authenticated API means passing the same `client=`, `bearer=`, or
 `auth=` to *every* call. Register them once with `set_defaults(...)` and every
@@ -222,7 +269,9 @@ By default, each method returns a `pl.Expr` of `Utf8`. With `with_metadata=True`
 {"body": Utf8, "status": Int64, "elapsed_ms": Float64, "error": Utf8}
 ```
 
-Use `.str.json_decode()` to parse JSON responses.
+See [Decoding JSON responses](#6-decoding-json-responses) for how to parse the
+body — pass an explicit `dtype` in an expression, or call `.str.json_decode()`
+on the materialized `Series` to infer the schema.
 
 ### Examples
 
@@ -318,7 +367,7 @@ endpoint, network RTT will dominate and the gap between clients shrinks.
 
 ## Tips and patterns
 
-- **Decode JSON immediately**: chain `.str.json_decode()` and then `.struct.unnest()` (or `pl.col("response").struct.field("…")`) to flatten the result.
+- **Decode JSON immediately**: chain `.str.json_decode(dtype)` (an explicit schema is required in an expression — see [Decoding JSON responses](#6-decoding-json-responses)) and then `.struct.unnest()` (or `pl.col("response").struct.field("…")`) to flatten the result.
 - **Build URLs from columns**: use Polars string concatenation or `pl.format("https://api.example.com/users/{}", pl.col("user_id"))` to build per-row URLs.
 - **Prefer `aget` / `apost` for many rows**: async variants run requests concurrently and are typically much faster for I/O-bound workloads.
 - **Inspect failures**: the sync helpers return `null` for non-2xx responses; check for nulls in the resulting column before decoding.
@@ -338,7 +387,7 @@ Yes. `aget` and `apost` issue requests concurrently with `asyncio.gather`, which
 Yes — because everything is built on Polars expressions, you can use it in `LazyFrame.with_columns(...)` pipelines.
 
 **What does it return?**
-A `Utf8` column with the raw response body. Pipe it through `.str.json_decode()` to parse JSON responses.
+A `Utf8` column with the raw response body. Parse it with `.str.json_decode(dtype)` in an expression, or call `.str.json_decode()` on the materialized `Series` to infer the schema — see [Decoding JSON responses](#6-decoding-json-responses).
 
 ## Contributing
 
