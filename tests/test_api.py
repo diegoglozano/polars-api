@@ -179,6 +179,26 @@ def test_apost_sends_json_body(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
 
+def test_aget_omits_null_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A null param value must be dropped, not coerced to the string "None" (async path)."""
+    seen: list[dict[str, Any]] = []
+
+    def handler(method: str, url: str, kwargs: dict[str, Any]) -> _FakeAioResponse:
+        seen.append(kwargs.get("params"))
+        return _FakeAioResponse(200, "ok")
+
+    _patch_async(monkeypatch, handler)
+
+    df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]}).with_columns(
+        pl.struct(userId=pl.Series([1, 2]), opt=pl.Series([None, None], dtype=pl.Int64)).alias("params"),
+    )
+    out = df.with_columns(pl.col("url").api.aget(params=pl.col("params")).alias("res"))
+
+    assert out["res"].to_list() == ["ok", "ok"]
+    # The null "opt" field is omitted entirely; no "opt": "None" leaks through.
+    assert sorted(seen, key=lambda p: p["userId"]) == [{"userId": "1"}, {"userId": "2"}]
+
+
 def test_with_metadata_sync_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_sync(monkeypatch, lambda req: httpx.Response(200, text="hello"))
 
