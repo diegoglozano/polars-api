@@ -8,7 +8,15 @@ import polars as pl
 import pytest
 from multidict import CIMultiDict, CIMultiDictProxy
 
-import polars_api  # noqa: F401  registers the `api` namespace
+import polars_api
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_defaults() -> Any:
+    """Global defaults are module-level state; keep tests isolated."""
+    polars_api.reset_defaults()
+    yield
+    polars_api.reset_defaults()
 
 
 # ---- sync mocking (httpx) ----
@@ -606,6 +614,138 @@ def test_paginate_max_pages_caps(monkeypatch: pytest.MonkeyPatch) -> None:
     out = df.with_columns(pl.col("url").api.paginate(max_pages=3).alias("pages"))
 
     assert len(out["pages"].to_list()[0]) == 3
+
+
+def test_set_defaults_applies_client() -> None:
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, text="from-default"))
+    client = httpx.Client(transport=transport)
+    polars_api.set_defaults(client=client)
+
+    df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]})
+    out = df.with_columns(pl.col("url").api.get().alias("r"))
+
+    assert out["r"].to_list() == ["from-default", "from-default"]
+    client.close()
+
+
+def test_explicit_arg_overrides_default() -> None:
+    default_transport = httpx.MockTransport(lambda req: httpx.Response(200, text="default"))
+    explicit_transport = httpx.MockTransport(lambda req: httpx.Response(200, text="explicit"))
+    default_client = httpx.Client(transport=default_transport)
+    explicit_client = httpx.Client(transport=explicit_transport)
+    polars_api.set_defaults(client=default_client)
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    out = df.with_columns(pl.col("url").api.get(client=explicit_client).alias("r"))
+
+    assert out["r"].to_list() == ["explicit"]
+    default_client.close()
+    explicit_client.close()
+
+
+def test_set_defaults_applies_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.headers.get("authorization", ""))
+        return httpx.Response(200, text="ok")
+
+    _patch_sync(monkeypatch, handler)
+    polars_api.set_defaults(auth=("alice", "s3cret"))
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    df.with_columns(pl.col("url").api.get().alias("r")).collect_schema()
+
+    assert seen == ["Basic YWxpY2U6czNjcmV0"]
+
+
+def test_set_defaults_applies_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    state = {"calls": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        if state["calls"] < 3:
+            return httpx.Response(503, text="busy")
+        return httpx.Response(200, text="ok")
+
+    _patch_sync(monkeypatch, handler)
+    polars_api.set_defaults(retries=3, backoff=0.0)
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    out = df.with_columns(pl.col("url").api.get().alias("r"))
+
+    assert out["r"].to_list() == ["ok"]
+    assert state["calls"] == 3
+
+
+def test_set_defaults_applies_to_async() -> None:
+    session = _FakeAioSession(lambda m, url, kw: _FakeAioResponse(200, f"hi:{_path(url)}"))
+    polars_api.set_defaults(client=session)
+
+    df = pl.DataFrame({"url": ["http://x/a", "http://x/b"]})
+    out = df.with_columns(pl.col("url").api.aget().alias("r"))
+
+    assert out["r"].to_list() == ["hi:/a", "hi:/b"]
+
+
+def test_get_defaults_returns_copy() -> None:
+    polars_api.set_defaults(retries=2)
+    snapshot = polars_api.get_defaults()
+    assert snapshot == {"retries": 2}
+    # Mutating the returned dict must not affect the live config.
+    snapshot["retries"] = 99
+    assert polars_api.get_defaults() == {"retries": 2}
+
+
+def test_reset_defaults_named_and_all() -> None:
+    polars_api.set_defaults(retries=2, backoff=0.5, cache=True)
+    polars_api.reset_defaults("retries")
+    assert polars_api.get_defaults() == {"backoff": 0.5, "cache": True}
+    polars_api.reset_defaults()
+    assert polars_api.get_defaults() == {}
+
+
+def test_defaults_context_manager_scopes_and_restores() -> None:
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, text="scoped"))
+    client = httpx.Client(transport=transport)
+    polars_api.set_defaults(retries=1)
+
+    df = pl.DataFrame({"url": ["http://x/a"]})
+    with polars_api.defaults(client=client):
+        out = df.with_columns(pl.col("url").api.get().alias("r"))
+        assert out["r"].to_list() == ["scoped"]
+        # The pre-existing default is preserved alongside the scoped one.
+        assert polars_api.get_defaults() == {"retries": 1, "client": client}
+
+    # On exit, the scoped override is gone but the prior default remains.
+    assert polars_api.get_defaults() == {"retries": 1}
+    client.close()
+
+
+def test_set_defaults_rejects_unknown_option() -> None:
+    with pytest.raises(ValueError, match="Unknown option"):
+        polars_api.set_defaults(not_a_real_option=1)
+
+
+def test_defaults_context_manager_rejects_unknown_option() -> None:
+    with pytest.raises(ValueError, match="Unknown option"), polars_api.defaults(nope=1):
+        pass
+
+
+def test_set_defaults_applies_to_paginate(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.headers.get("authorization", ""))
+        return httpx.Response(200, text="page")
+
+    _patch_sync(monkeypatch, handler)
+    polars_api.set_defaults(bearer="tok")
+
+    df = pl.DataFrame({"url": ["http://x/p1"]})
+    df.with_columns(pl.col("url").api.paginate(max_pages=1).alias("pages")).collect_schema()
+
+    assert seen == ["Bearer tok"]
 
 
 def test_paginate_custom_next_url(monkeypatch: pytest.MonkeyPatch) -> None:

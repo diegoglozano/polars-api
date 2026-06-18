@@ -18,6 +18,7 @@ A running list of features to consider for `polars-api`. Ordered roughly by valu
 - Lifecycle hooks: `on_request` / `on_response` callbacks. Sync verbs receive `httpx.Request` / `httpx.Response`; async verbs receive `(method, url, kwargs)` / `aiohttp.ClientResponse`.
 - Aiohttp-based async path: ~10× higher throughput than httpx at high concurrency.
 - Pagination helper: `paginate(...)` follows `Link: rel="next"` by default, accepts a custom `next_url=` callable, and returns `List[Utf8]` of bodies per row.
+- Global defaults: `set_defaults(...)` / `get_defaults()` / `reset_defaults(...)` and the `defaults(...)` context manager register request options (e.g. `client`, `auth`, `bearer`, `retries`) once instead of passing them on every call. Explicit per-call arguments always win.
 
 ## Remaining
 

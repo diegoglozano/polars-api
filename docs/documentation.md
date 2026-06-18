@@ -23,6 +23,30 @@ import polars_api  # noqa: F401  — registers the `.api` namespace
 
 All methods return a `pl.Expr` of dtype `Utf8` containing the response body for each row. Use `.str.json_decode()` to parse JSON responses.
 
+## Global configuration
+
+Set request options once instead of passing them on every call. Anything left
+unset on a call falls back to the configured default, then the built-in default;
+explicit per-call arguments always take precedence.
+
+```python
+import httpx
+import polars_api
+
+polars_api.set_defaults(client=httpx.Client(base_url="https://api.example.com"))
+
+with polars_api.defaults(retries=3):
+    ...  # `.api` calls in here retry up to 3 times
+```
+
+::: polars_api.set_defaults
+
+::: polars_api.get_defaults
+
+::: polars_api.reset_defaults
+
+::: polars_api.defaults
+
 ## `polars_api.Api`
 
 ::: polars_api.api.Api

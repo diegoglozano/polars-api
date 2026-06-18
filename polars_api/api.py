@@ -1,8 +1,11 @@
 import asyncio
 import base64
+import contextlib
 import re
+import threading
 import time
 import warnings
+from collections.abc import Iterator
 from typing import Any, Callable, Optional, Union
 
 import aiohttp
@@ -152,6 +155,167 @@ def _build_request_kwargs(
     if timeout is not None:
         kwargs["timeout"] = timeout
     return kwargs
+
+
+# ---- Global defaults ------------------------------------------------------
+#
+# Passing ``client=...`` (and friends) to every ``.api`` call is tedious when
+# every request in a pipeline hits the same authenticated API. ``set_defaults``
+# lets a user register option values once; every verb then falls back to them
+# for any argument left unset. Explicit per-call arguments always win.
+
+
+class _Unset:
+    """Sentinel for "argument not supplied" so we can tell it apart from an
+    explicit ``None`` and fall back to the configured global default."""
+
+    _instance: "Optional[_Unset]" = None
+
+    def __new__(cls) -> "_Unset":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+UNSET = _Unset()
+
+# The options that may be configured globally. These mirror the keyword
+# arguments accepted by ``request`` / ``arequest`` / ``paginate`` (minus the
+# per-row data carriers ``params`` / ``body`` / ``data`` and pagination-only
+# knobs like ``max_pages`` / ``next_url``). Each maps to the value used when
+# the argument is neither passed explicitly nor configured globally.
+_OPTION_DEFAULTS: dict[str, Any] = {
+    "headers": None,
+    "client": None,
+    "timeout": None,
+    "retries": 0,
+    "backoff": 0.0,
+    "cache": False,
+    "with_metadata": False,
+    "with_response_headers": False,
+    "on_error": "null",
+    "on_request": None,
+    "on_response": None,
+    "auth": None,
+    "bearer": None,
+    "api_key": None,
+    "api_key_header": "X-API-Key",
+    "max_concurrency": None,
+}
+
+_DEFAULTS: dict[str, Any] = {}
+_DEFAULTS_LOCK = threading.Lock()
+
+
+def _check_option_names(options: dict[str, Any], where: str) -> None:
+    unknown = set(options) - set(_OPTION_DEFAULTS)
+    if unknown:
+        msg = (
+            f"Unknown option(s) for {where}: {', '.join(sorted(unknown))}. "
+            f"Valid options are: {', '.join(sorted(_OPTION_DEFAULTS))}."
+        )
+        raise ValueError(msg)
+
+
+def set_defaults(**options: Any) -> None:
+    """Register global default values for ``.api`` request options.
+
+    Any option accepted by ``get`` / ``post`` / ``aget`` / ``paginate`` etc. can
+    be set once here and is then applied to every subsequent call that does not
+    pass that argument explicitly. Explicit per-call arguments always take
+    precedence. This is most useful for the ``client`` argument when talking to
+    an authenticated API:
+
+    ```python
+    import httpx
+    import polars_api
+
+    polars_api.set_defaults(
+        client=httpx.Client(
+            base_url="https://api.example.com",
+            headers={"Authorization": "Bearer ..."},
+        ),
+    )
+    pl.col("path").api.get()  # uses the configured client automatically
+    ```
+
+    Note that ``client`` is shared across the sync (``httpx.Client``) and async
+    (``aiohttp.ClientSession``) paths, which require different client types. If
+    you mix sync and async verbs, prefer setting ``client`` per call (or use the
+    ``defaults`` context manager) so each path gets the right client.
+
+    Raises ``ValueError`` if an unknown option name is supplied.
+    """
+    _check_option_names(options, "set_defaults")
+    with _DEFAULTS_LOCK:
+        _DEFAULTS.update(options)
+
+
+def get_defaults() -> dict[str, Any]:
+    """Return a copy of the currently configured global defaults."""
+    with _DEFAULTS_LOCK:
+        return dict(_DEFAULTS)
+
+
+def reset_defaults(*options: str) -> None:
+    """Clear configured global defaults.
+
+    With no arguments, clears all of them. Pass option names to clear only
+    those:
+
+    ```python
+    polars_api.reset_defaults()           # clear everything
+    polars_api.reset_defaults("client")   # clear just `client`
+    ```
+    """
+    with _DEFAULTS_LOCK:
+        if not options:
+            _DEFAULTS.clear()
+            return
+        for name in options:
+            _DEFAULTS.pop(name, None)
+
+
+@contextlib.contextmanager
+def defaults(**options: Any) -> "Iterator[None]":
+    """Context manager that applies global defaults only within the block.
+
+    Restores the previous defaults on exit, so it composes with (and overrides)
+    any values set via ``set_defaults``:
+
+    ```python
+    with polars_api.defaults(client=session, retries=3):
+        df.with_columns(pl.col("path").api.aget().alias("res"))
+    ```
+
+    Raises ``ValueError`` if an unknown option name is supplied.
+    """
+    _check_option_names(options, "defaults")
+    with _DEFAULTS_LOCK:
+        previous = dict(_DEFAULTS)
+        _DEFAULTS.update(options)
+    try:
+        yield
+    finally:
+        with _DEFAULTS_LOCK:
+            _DEFAULTS.clear()
+            _DEFAULTS.update(previous)
+
+
+def _resolve(name: str, value: Any) -> Any:
+    """Resolve a single option: explicit value > global default > built-in default."""
+    if value is not UNSET:
+        return value
+    with _DEFAULTS_LOCK:
+        if name in _DEFAULTS:
+            return _DEFAULTS[name]
+    return _OPTION_DEFAULTS[name]
 
 
 @pl.api.register_expr_namespace("api")
@@ -753,40 +917,50 @@ class Api:
         body: Optional[pl.Expr] = None,
         *,
         data: Optional[pl.Expr] = None,
-        headers: Optional[pl.Expr] = None,
-        client: Optional[httpx.Client] = None,
-        timeout: Optional[float] = None,
-        retries: int = 0,
-        backoff: float = 0.0,
-        cache: bool = False,
-        with_metadata: bool = False,
-        with_response_headers: bool = False,
-        on_error: OnError = "null",
-        on_request: Optional[RequestHook] = None,
-        on_response: Optional[ResponseHook] = None,
-        auth: Optional[tuple[str, str]] = None,
-        bearer: Optional[Union[str, pl.Expr]] = None,
-        api_key: Optional[Union[str, pl.Expr]] = None,
-        api_key_header: str = "X-API-Key",
+        headers: Any = UNSET,
+        client: Any = UNSET,
+        timeout: Any = UNSET,
+        retries: Any = UNSET,
+        backoff: Any = UNSET,
+        cache: Any = UNSET,
+        with_metadata: Any = UNSET,
+        with_response_headers: Any = UNSET,
+        on_error: Any = UNSET,
+        on_request: Any = UNSET,
+        on_response: Any = UNSET,
+        auth: Any = UNSET,
+        bearer: Any = UNSET,
+        api_key: Any = UNSET,
+        api_key_header: Any = UNSET,
     ) -> pl.Expr:
-        """Issue a synchronous HTTP request per row."""
-        merged_headers = self._build_headers_expr(headers, auth, bearer, api_key, api_key_header)
+        """Issue a synchronous HTTP request per row.
+
+        Any argument left unset falls back to the value registered via
+        ``set_defaults`` (or the ``defaults`` context manager), then to the built-in default.
+        """
+        merged_headers = self._build_headers_expr(
+            _resolve("headers", headers),
+            _resolve("auth", auth),
+            _resolve("bearer", bearer),
+            _resolve("api_key", api_key),
+            _resolve("api_key_header", api_key_header),
+        )
         return self._sync_call(
             method.upper(),
             params,
             body,
             data,
             merged_headers,
-            client=client,
-            timeout=timeout,
-            retries=retries,
-            backoff=backoff,
-            cache=cache,
-            with_metadata=with_metadata,
-            with_response_headers=with_response_headers,
-            on_error=on_error,
-            on_request=on_request,
-            on_response=on_response,
+            client=_resolve("client", client),
+            timeout=_resolve("timeout", timeout),
+            retries=_resolve("retries", retries),
+            backoff=_resolve("backoff", backoff),
+            cache=_resolve("cache", cache),
+            with_metadata=_resolve("with_metadata", with_metadata),
+            with_response_headers=_resolve("with_response_headers", with_response_headers),
+            on_error=_resolve("on_error", on_error),
+            on_request=_resolve("on_request", on_request),
+            on_response=_resolve("on_response", on_response),
         )
 
     def arequest(
@@ -796,47 +970,57 @@ class Api:
         body: Optional[pl.Expr] = None,
         *,
         data: Optional[pl.Expr] = None,
-        headers: Optional[pl.Expr] = None,
-        client: Optional[aiohttp.ClientSession] = None,
-        timeout: Optional[float] = None,
-        retries: int = 0,
-        backoff: float = 0.0,
-        max_concurrency: Optional[int] = None,
-        cache: bool = False,
-        with_metadata: bool = False,
-        with_response_headers: bool = False,
-        on_error: OnError = "null",
-        on_request: Optional[AsyncRequestHook] = None,
-        on_response: Optional[AsyncResponseHook] = None,
-        auth: Optional[tuple[str, str]] = None,
-        bearer: Optional[Union[str, pl.Expr]] = None,
-        api_key: Optional[Union[str, pl.Expr]] = None,
-        api_key_header: str = "X-API-Key",
+        headers: Any = UNSET,
+        client: Any = UNSET,
+        timeout: Any = UNSET,
+        retries: Any = UNSET,
+        backoff: Any = UNSET,
+        max_concurrency: Any = UNSET,
+        cache: Any = UNSET,
+        with_metadata: Any = UNSET,
+        with_response_headers: Any = UNSET,
+        on_error: Any = UNSET,
+        on_request: Any = UNSET,
+        on_response: Any = UNSET,
+        auth: Any = UNSET,
+        bearer: Any = UNSET,
+        api_key: Any = UNSET,
+        api_key_header: Any = UNSET,
     ) -> pl.Expr:
-        """Issue concurrent asynchronous HTTP requests across the batch."""
-        merged_headers = self._build_headers_expr(headers, auth, bearer, api_key, api_key_header)
+        """Issue concurrent asynchronous HTTP requests across the batch.
+
+        Any argument left unset falls back to the value registered via
+        ``set_defaults`` (or the ``defaults`` context manager), then to the built-in default.
+        """
+        merged_headers = self._build_headers_expr(
+            _resolve("headers", headers),
+            _resolve("auth", auth),
+            _resolve("bearer", bearer),
+            _resolve("api_key", api_key),
+            _resolve("api_key_header", api_key_header),
+        )
         return self._async_call(
             method.upper(),
             params,
             body,
             data,
             merged_headers,
-            client=client,
-            timeout=timeout,
-            retries=retries,
-            backoff=backoff,
-            max_concurrency=max_concurrency,
-            cache=cache,
-            with_metadata=with_metadata,
-            with_response_headers=with_response_headers,
-            on_error=on_error,
-            on_request=on_request,
-            on_response=on_response,
+            client=_resolve("client", client),
+            timeout=_resolve("timeout", timeout),
+            retries=_resolve("retries", retries),
+            backoff=_resolve("backoff", backoff),
+            max_concurrency=_resolve("max_concurrency", max_concurrency),
+            cache=_resolve("cache", cache),
+            with_metadata=_resolve("with_metadata", with_metadata),
+            with_response_headers=_resolve("with_response_headers", with_response_headers),
+            on_error=_resolve("on_error", on_error),
+            on_request=_resolve("on_request", on_request),
+            on_response=_resolve("on_response", on_response),
         )
 
     # ---- Verb wrappers (sync) ----
 
-    def get(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None, **kwargs: Any) -> pl.Expr:
+    def get(self, params: Optional[pl.Expr] = None, timeout: Any = UNSET, **kwargs: Any) -> pl.Expr:
         """Issue a synchronous GET per row."""
         return self.request("GET", params, None, timeout=timeout, **kwargs)
 
@@ -844,7 +1028,7 @@ class Api:
         self,
         params: Optional[pl.Expr] = None,
         body: Optional[pl.Expr] = None,
-        timeout: Optional[float] = None,
+        timeout: Any = UNSET,
         **kwargs: Any,
     ) -> pl.Expr:
         """Issue a synchronous POST per row."""
@@ -854,7 +1038,7 @@ class Api:
         self,
         params: Optional[pl.Expr] = None,
         body: Optional[pl.Expr] = None,
-        timeout: Optional[float] = None,
+        timeout: Any = UNSET,
         **kwargs: Any,
     ) -> pl.Expr:
         """Issue a synchronous PUT per row."""
@@ -864,23 +1048,23 @@ class Api:
         self,
         params: Optional[pl.Expr] = None,
         body: Optional[pl.Expr] = None,
-        timeout: Optional[float] = None,
+        timeout: Any = UNSET,
         **kwargs: Any,
     ) -> pl.Expr:
         """Issue a synchronous PATCH per row."""
         return self.request("PATCH", params, body, timeout=timeout, **kwargs)
 
-    def delete(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None, **kwargs: Any) -> pl.Expr:
+    def delete(self, params: Optional[pl.Expr] = None, timeout: Any = UNSET, **kwargs: Any) -> pl.Expr:
         """Issue a synchronous DELETE per row."""
         return self.request("DELETE", params, None, timeout=timeout, **kwargs)
 
-    def head(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None, **kwargs: Any) -> pl.Expr:
+    def head(self, params: Optional[pl.Expr] = None, timeout: Any = UNSET, **kwargs: Any) -> pl.Expr:
         """Issue a synchronous HEAD per row."""
         return self.request("HEAD", params, None, timeout=timeout, **kwargs)
 
     # ---- Verb wrappers (async) ----
 
-    def aget(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None, **kwargs: Any) -> pl.Expr:
+    def aget(self, params: Optional[pl.Expr] = None, timeout: Any = UNSET, **kwargs: Any) -> pl.Expr:
         """Issue concurrent asynchronous GETs across the batch."""
         return self.arequest("GET", params, None, timeout=timeout, **kwargs)
 
@@ -888,7 +1072,7 @@ class Api:
         self,
         params: Optional[pl.Expr] = None,
         body: Optional[pl.Expr] = None,
-        timeout: Optional[float] = None,
+        timeout: Any = UNSET,
         **kwargs: Any,
     ) -> pl.Expr:
         """Issue concurrent asynchronous POSTs across the batch."""
@@ -898,7 +1082,7 @@ class Api:
         self,
         params: Optional[pl.Expr] = None,
         body: Optional[pl.Expr] = None,
-        timeout: Optional[float] = None,
+        timeout: Any = UNSET,
         **kwargs: Any,
     ) -> pl.Expr:
         """Issue concurrent asynchronous PUTs across the batch."""
@@ -908,17 +1092,17 @@ class Api:
         self,
         params: Optional[pl.Expr] = None,
         body: Optional[pl.Expr] = None,
-        timeout: Optional[float] = None,
+        timeout: Any = UNSET,
         **kwargs: Any,
     ) -> pl.Expr:
         """Issue concurrent asynchronous PATCHes across the batch."""
         return self.arequest("PATCH", params, body, timeout=timeout, **kwargs)
 
-    def adelete(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None, **kwargs: Any) -> pl.Expr:
+    def adelete(self, params: Optional[pl.Expr] = None, timeout: Any = UNSET, **kwargs: Any) -> pl.Expr:
         """Issue concurrent asynchronous DELETEs across the batch."""
         return self.arequest("DELETE", params, None, timeout=timeout, **kwargs)
 
-    def ahead(self, params: Optional[pl.Expr] = None, timeout: Optional[float] = None, **kwargs: Any) -> pl.Expr:
+    def ahead(self, params: Optional[pl.Expr] = None, timeout: Any = UNSET, **kwargs: Any) -> pl.Expr:
         """Issue concurrent asynchronous HEADs across the batch."""
         return self.arequest("HEAD", params, None, timeout=timeout, **kwargs)
 
@@ -931,17 +1115,17 @@ class Api:
         method: str = "GET",
         max_pages: int = 10,
         next_url: Optional[NextUrl] = None,
-        headers: Optional[pl.Expr] = None,
-        client: Optional[httpx.Client] = None,
-        timeout: Optional[float] = None,
-        retries: int = 0,
-        backoff: float = 0.0,
-        on_request: Optional[RequestHook] = None,
-        on_response: Optional[ResponseHook] = None,
-        auth: Optional[tuple[str, str]] = None,
-        bearer: Optional[Union[str, pl.Expr]] = None,
-        api_key: Optional[Union[str, pl.Expr]] = None,
-        api_key_header: str = "X-API-Key",
+        headers: Any = UNSET,
+        client: Any = UNSET,
+        timeout: Any = UNSET,
+        retries: Any = UNSET,
+        backoff: Any = UNSET,
+        on_request: Any = UNSET,
+        on_response: Any = UNSET,
+        auth: Any = UNSET,
+        bearer: Any = UNSET,
+        api_key: Any = UNSET,
+        api_key_header: Any = UNSET,
     ) -> pl.Expr:
         """Synchronously paginate per row, following Link: rel="next" by default.
 
@@ -951,8 +1135,23 @@ class Api:
 
         Pass `next_url=lambda response: ...` to extract the next URL from a custom
         location (e.g. a JSON field) instead of the Link header.
+
+        Any unset argument falls back to the value registered via
+        ``set_defaults`` (or the ``defaults`` context manager), then to the built-in default.
         """
-        merged_headers = self._build_headers_expr(headers, auth, bearer, api_key, api_key_header)
+        client = _resolve("client", client)
+        timeout = _resolve("timeout", timeout)
+        retries = _resolve("retries", retries)
+        backoff = _resolve("backoff", backoff)
+        on_request = _resolve("on_request", on_request)
+        on_response = _resolve("on_response", on_response)
+        merged_headers = self._build_headers_expr(
+            _resolve("headers", headers),
+            _resolve("auth", auth),
+            _resolve("bearer", bearer),
+            _resolve("api_key", api_key),
+            _resolve("api_key_header", api_key_header),
+        )
         params_expr = pl.lit(None) if params is None else params
         headers_expr = pl.lit(None) if merged_headers is None else merged_headers
         extractor = next_url or (lambda r: _parse_link_next(r.headers.get("link")))
