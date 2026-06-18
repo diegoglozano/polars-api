@@ -21,7 +21,7 @@ import polars_api  # noqa: F401  — registers the `.api` namespace
 | [`post`](#polars_api.api.Api.post)   | POST      | sync  |
 | [`apost`](#polars_api.api.Api.apost) | POST      | async |
 
-All methods return a `pl.Expr` of dtype `Utf8` containing the response body for each row. Use `.str.json_decode()` to parse JSON responses.
+All methods return a `pl.Expr` of dtype `Utf8` containing the response body for each row. To parse JSON, pass an explicit schema to `.str.json_decode(dtype)` in an expression (recent Polars makes the `dtype` argument required), or call `.str.json_decode()` on the materialized `Series` to infer the schema. See [Decoding JSON responses](index.md#decoding-json-responses).
 
 ## `polars_api.Api`
 

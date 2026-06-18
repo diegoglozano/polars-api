@@ -23,13 +23,19 @@ description: Call REST APIs from a Polars DataFrame, one row at a time, using na
 import polars as pl
 import polars_api  # noqa: F401  — registers the `.api` namespace
 
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
 (
     pl.DataFrame({"url": ["https://jsonplaceholder.typicode.com/posts/1"]})
       .with_columns(
-          pl.col("url").api.get().str.json_decode().alias("response")
+          pl.col("url").api.get().str.json_decode(post).alias("response")
       )
 )
 ```
+
+> In an expression, `str.json_decode()` requires an explicit `dtype` (recent
+> Polars made it mandatory). See [Decoding JSON responses](#decoding-json-responses)
+> for the schema-free, eager alternative.
 
 ## Why polars-api?
 
@@ -57,13 +63,15 @@ Requires Python 3.9+ and Polars 1.0+.
 import polars as pl
 import polars_api  # noqa: F401
 
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
 (
     pl.DataFrame({"id": [1, 2, 3]})
       .with_columns(
           ("https://jsonplaceholder.typicode.com/posts/" + pl.col("id").cast(pl.Utf8)).alias("url")
       )
       .with_columns(
-          pl.col("url").api.get().str.json_decode().alias("response")
+          pl.col("url").api.get().str.json_decode(post).alias("response")
       )
 )
 ```
@@ -71,6 +79,8 @@ import polars_api  # noqa: F401
 ### POST with a JSON body
 
 ```python
+post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
 (
     pl.DataFrame({"url": ["https://jsonplaceholder.typicode.com/posts"] * 3})
       .with_columns(
@@ -81,10 +91,36 @@ import polars_api  # noqa: F401
           ).alias("body"),
       )
       .with_columns(
-          pl.col("url").api.post(body=pl.col("body")).str.json_decode().alias("response")
+          pl.col("url").api.post(body=pl.col("body")).str.json_decode(post).alias("response")
       )
 )
 ```
+
+### Decoding JSON responses
+
+Every verb returns a `Utf8` column of raw response bodies. There are two ways to
+parse it:
+
+- **In an expression (`DataFrame` and `LazyFrame`)** — pass an explicit `dtype`.
+  Recent Polars made `Expr.str.json_decode()`'s `dtype` required, since the lazy
+  engine needs the output schema up front. Wrap the element schema in
+  `pl.List(...)` when the endpoint returns a JSON array:
+
+  ```python
+  post = pl.Struct({"userId": pl.Int64, "id": pl.Int64, "title": pl.Utf8, "body": pl.Utf8})
+
+  df.with_columns(pl.col("response").str.json_decode(post))
+  ```
+
+- **On a materialized `Series` (eager `DataFrame` only)** —
+  `Series.str.json_decode()` can still infer the schema from the data:
+
+  ```python
+  df = df.with_columns(df["response"].str.json_decode().alias("response"))
+  ```
+
+  Inference only works on a collected `DataFrame`; inside a `LazyFrame` pipeline
+  use the expression form with an explicit dtype.
 
 ### Async for throughput
 
@@ -102,7 +138,7 @@ pl.col("url").api.apost(body=pl.col("body"))  # concurrent POST
 | `post`  | POST      | sync  |
 | `apost` | POST      | async |
 
-All methods accept optional `params` (struct expression for query string), `timeout` (seconds), and POST methods additionally accept `body` (struct expression serialized as JSON). Each returns a `Utf8` expression with the response body — pipe it through `.str.json_decode()` to parse JSON.
+All methods accept optional `params` (struct expression for query string), `timeout` (seconds), and POST methods additionally accept `body` (struct expression serialized as JSON). Each returns a `Utf8` expression with the response body — parse it with [`.str.json_decode()`](#decoding-json-responses).
 
 See the full [API reference](documentation.md).
 
