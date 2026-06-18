@@ -185,6 +185,49 @@ df = df.with_columns(
 Inference only works on an already-collected `DataFrame`; inside a `LazyFrame`
 pipeline you must use the expression form with an explicit dtype.
 
+### 7. Global defaults (set options once)
+
+Talking to an authenticated API means passing the same `client=`, `bearer=`, or
+`auth=` to _every_ call. Register them once with `set_defaults(...)` and every
+subsequent `.api` call falls back to them for any argument you don't pass
+explicitly:
+
+```python
+import httpx
+import polars_api
+
+polars_api.set_defaults(
+    client=httpx.Client(
+        base_url="https://api.example.com",
+        headers={"Authorization": "Bearer my-token"},
+    ),
+    retries=3,
+    backoff=0.5,
+)
+
+# No need to repeat client=/retries=/backoff= on each call:
+df.with_columns(pl.col("path").api.get().alias("res"))
+```
+
+Explicit per-call arguments always win over the configured default. Use the
+`defaults(...)` context manager to scope overrides to a block, and
+`reset_defaults()` to clear them:
+
+```python
+# Scope a client to one block; previous defaults are restored on exit
+with polars_api.defaults(client=session, max_concurrency=10):
+    df.with_columns(pl.col("path").api.aget().alias("res"))
+
+polars_api.reset_defaults()            # clear everything
+polars_api.reset_defaults("client")    # clear just one option
+polars_api.get_defaults()              # inspect the current config
+```
+
+> **Note:** `client` is shared across the sync (`httpx.Client`) and async
+> (`aiohttp.ClientSession`) paths, which need different client types. If you mix
+> sync and async verbs, set `client` per call (or via `defaults(...)`) so each
+> path gets the right client.
+
 ## API reference
 
 All methods live under the `.api` namespace on any Polars expression that resolves to a URL string.
@@ -256,6 +299,24 @@ df.with_columns(
     pl.col("url").api.paginate(max_pages=20).alias("pages")
 ).explode("pages")
 ```
+
+### Global configuration
+
+Module-level helpers let you set request options once instead of repeating them
+on every call. Anything left unset on a call falls back to the configured
+default, then to the built-in default; explicit per-call arguments always win.
+
+| Function                            | Purpose                                                              |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| `polars_api.set_defaults(**o)`      | Register persistent defaults for any request option.                 |
+| `polars_api.get_defaults()`         | Return a copy of the currently configured defaults.                  |
+| `polars_api.reset_defaults(*names)` | Clear all defaults, or only the named ones.                          |
+| `polars_api.defaults(**o)`          | Context manager that applies defaults within a block, then restores. |
+
+Configurable options mirror the per-call keyword arguments: `client`, `headers`,
+`timeout`, `retries`, `backoff`, `max_concurrency`, `cache`, `with_metadata`,
+`with_response_headers`, `on_error`, `on_request`, `on_response`, `auth`,
+`bearer`, `api_key`, and `api_key_header`.
 
 ## Benchmarks
 
