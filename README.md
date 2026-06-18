@@ -188,7 +188,7 @@ pipeline you must use the expression form with an explicit dtype.
 ### 7. Global defaults (set options once)
 
 Talking to an authenticated API means passing the same `client=`, `bearer=`, or
-`auth=` to *every* call. Register them once with `set_defaults(...)` and every
+`auth=` to _every_ call. Register them once with `set_defaults(...)` and every
 subsequent `.api` call falls back to them for any argument you don't pass
 explicitly:
 
@@ -306,12 +306,12 @@ Module-level helpers let you set request options once instead of repeating them
 on every call. Anything left unset on a call falls back to the configured
 default, then to the built-in default; explicit per-call arguments always win.
 
-| Function                       | Purpose                                                            |
-| ------------------------------ | ----------------------------------------------------------------- |
-| `polars_api.set_defaults(**o)` | Register persistent defaults for any request option.              |
-| `polars_api.get_defaults()`    | Return a copy of the currently configured defaults.               |
-| `polars_api.reset_defaults(*names)` | Clear all defaults, or only the named ones.                  |
-| `polars_api.defaults(**o)`     | Context manager that applies defaults within a block, then restores. |
+| Function                            | Purpose                                                              |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| `polars_api.set_defaults(**o)`      | Register persistent defaults for any request option.                 |
+| `polars_api.get_defaults()`         | Return a copy of the currently configured defaults.                  |
+| `polars_api.reset_defaults(*names)` | Clear all defaults, or only the named ones.                          |
+| `polars_api.defaults(**o)`          | Context manager that applies defaults within a block, then restores. |
 
 Configurable options mirror the per-call keyword arguments: `client`, `headers`,
 `timeout`, `retries`, `backoff`, `max_concurrency`, `cache`, `with_metadata`,
