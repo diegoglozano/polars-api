@@ -357,7 +357,7 @@ class Api:
         if params is not None:
             # aiohttp's params accept str/int/float values; coerce non-strings
             # so behaviour matches httpx.
-            kwargs["params"] = {k: v if isinstance(v, str) else str(v) for k, v in params.items()}
+            kwargs["params"] = {k: v if isinstance(v, str) else str(v) for k, v in params.items() if v is not None}
         if headers is not None:
             kwargs["headers"] = headers
         if body is not None:
