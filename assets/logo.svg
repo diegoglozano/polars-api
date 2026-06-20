@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="polars-api logo">
+  <title>polars-api</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0E7FC1"/>
+      <stop offset="100%" stop-color="#172554"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="48" fill="url(#bg)"/>
+
+  <!-- Stars -->
+  <g fill="#FBBF24" opacity="0.9">
+    <circle cx="32"  cy="40"  r="2"/>
+    <circle cx="62"  cy="24"  r="1.6"/>
+    <circle cx="194" cy="24"  r="1.6"/>
+    <circle cx="224" cy="40"  r="2"/>
+    <circle cx="40"  cy="226" r="1.6"/>
+    <circle cx="216" cy="226" r="1.6"/>
+  </g>
+
+  <!-- Left JSON brace { -->
+  <path d="M 72 44
+           Q 50 44 50 64
+           L 50 116
+           Q 50 128 30 128
+           Q 50 128 50 140
+           L 50 192
+           Q 50 212 72 212"
+        fill="none" stroke="#FBBF24" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Right JSON brace } -->
+  <path d="M 184 44
+           Q 206 44 206 64
+           L 206 116
+           Q 206 128 226 128
+           Q 206 128 206 140
+           L 206 192
+           Q 206 212 184 212"
+        fill="none" stroke="#FBBF24" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Polar bear head (the polars reference) -->
+  <g>
+    <!-- Ears -->
+    <ellipse cx="103" cy="100" rx="12" ry="15"
+             fill="#FFFFFF" stroke="#172554" stroke-width="1.8"/>
+    <ellipse cx="153" cy="100" rx="12" ry="15"
+             fill="#FFFFFF" stroke="#172554" stroke-width="1.8"/>
+    <ellipse cx="103" cy="102" rx="5" ry="7.5" fill="#0E7FC1" opacity="0.55"/>
+    <ellipse cx="153" cy="102" rx="5" ry="7.5" fill="#0E7FC1" opacity="0.55"/>
+
+    <!-- Head -->
+    <circle cx="128" cy="130" r="38"
+            fill="#FFFFFF" stroke="#172554" stroke-width="1.8"/>
+
+    <!-- Muzzle -->
+    <ellipse cx="128" cy="146" rx="16" ry="12" fill="#F1F5FB"/>
+
+    <!-- Eyes -->
+    <circle cx="114" cy="122" r="3.6" fill="#172554"/>
+    <circle cx="142" cy="122" r="3.6" fill="#172554"/>
+    <circle cx="114.9" cy="121" r="1.2" fill="#FFFFFF"/>
+    <circle cx="142.9" cy="121" r="1.2" fill="#FFFFFF"/>
+
+    <!-- Nose -->
+    <ellipse cx="128" cy="140" rx="4" ry="3" fill="#172554"/>
+
+    <!-- Mouth -->
+    <path d="M 128 144 Q 123.5 149 119.5 147.5"
+          fill="none" stroke="#172554" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M 128 144 Q 132.5 149 136.5 147.5"
+          fill="none" stroke="#172554" stroke-width="1.6" stroke-linecap="round"/>
+  </g>
+</svg>
